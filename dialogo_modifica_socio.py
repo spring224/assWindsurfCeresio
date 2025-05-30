@@ -101,6 +101,7 @@ class DialogoModificaSoci(QDialog):
 
     def carica_foto(self):
         file_name, _ = QFileDialog.getOpenFileName(self, "Seleziona foto", "", "Immagini (*.png *.jpg *.bmp)")
+        
         if file_name:
             self.foto_path = file_name
             self.foto_label.setText(os.path.basename(file_name))

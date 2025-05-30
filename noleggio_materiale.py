@@ -26,6 +26,7 @@ class NoleggioMateriale(QWidget):
     # 📸 Acquisizione documento
         self.btn_doc = QPushButton("📸 Acquisisci Documento")
         layout_main.addWidget(self.btn_doc)
+        self.btn_doc.clicked.connect(self.acquisisci_documento_da_webcam)
 
     # Sezione cliente
         self.txt_nome = QLineEdit(); self.txt_nome.setMaximumWidth(200)
@@ -91,13 +92,36 @@ class NoleggioMateriale(QWidget):
 
         self.setLayout(layout_main)
 
-    def acquisisci_documento(self):
-        # (mock temporaneo — inserire funzione webcam + OCR)
-        nome = "Mario"
-        cognome = "Rossi"
-        self.txt_nome.setText(nome)
-        self.txt_cognome.setText(cognome)
+# FUNZIONE DA INCOLLARE NELLA CLASSE
+    def acquisisci_documento_da_webcam(self):
+        cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # CAP_DSHOW migliora compatibilità con Windows
+        if not cap.isOpened():
+           QMessageBox.critical(self, "Errore", "Impossibile accedere alla webcam.")
+           return
 
+        cv2.namedWindow("Premi SPAZIO per acquisire, ESC per annullare")
+
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+              break
+        cv2.imshow("Premi SPAZIO per acquisire, ESC per annullare", frame)
+        key = cv2.waitKey(1)
+        if key == 27:  # ESC per uscire
+            break
+        elif key == 32:  # SPAZIO per acquisire
+            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+            nome_file = f"documento_{timestamp}.jpg"
+            cartella = os.path.join(os.getcwd(), "Documenti_per_noleggio")
+            os.makedirs(cartella, exist_ok=True)
+            path_completo = os.path.join(cartella, nome_file)
+            cv2.imwrite(path_completo, frame)
+            QMessageBox.information(self, "Documento acquisito", f"Documento salvato in:\n{path_completo}")
+            break
+
+        cap.release()
+        cv2.destroyAllWindows()
+        
     def carica_materiale(self):
         codice = self.txt_barcode.text()
         # chiamata a data_access per caricare da barcode
