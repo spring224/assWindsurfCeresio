@@ -104,20 +104,20 @@ class NoleggioMateriale(QWidget):
         while True:
             ret, frame = cap.read()
             if not ret:
-              break
-        cv2.imshow("Premi SPAZIO per acquisire, ESC per annullare", frame)
-        key = cv2.waitKey(1)
-        if key == 27:  # ESC per uscire
-            break
-        elif key == 32:  # SPAZIO per acquisire
-            timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-            nome_file = f"documento_{timestamp}.jpg"
-            cartella = os.path.join(os.getcwd(), "Documenti_per_noleggio")
-            os.makedirs(cartella, exist_ok=True)
-            path_completo = os.path.join(cartella, nome_file)
-            cv2.imwrite(path_completo, frame)
-            QMessageBox.information(self, "Documento acquisito", f"Documento salvato in:\n{path_completo}")
-            break
+                break
+            cv2.imshow("Premi SPAZIO per acquisire, ESC per annullare", frame)
+            key = cv2.waitKey(1)
+            if key == 27:  # ESC per uscire
+                break
+            elif key == 32:  # SPAZIO per acquisire
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                nome_file = f"documento_{timestamp}.jpg"
+                cartella = os.path.join(os.getcwd(), "Documenti_per_noleggio")
+                os.makedirs(cartella, exist_ok=True)
+                path_completo = os.path.join(cartella, nome_file)
+                cv2.imwrite(path_completo, frame)
+                QMessageBox.information(self, "Documento acquisito", f"Documento salvato in:\n{path_completo}")
+                break
 
         cap.release()
         cv2.destroyAllWindows()
