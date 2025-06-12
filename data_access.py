@@ -139,10 +139,15 @@ def elimina_materiale(id_materiale):
 def carica_materiali():
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute('SELECT id, codice, tipo, nome, produttore, provenienza, descrizione, note, barcode, rig FROM materiali')
-    risultati = cursor.fetchall()
+    # MODIFICA QUI: Elenco esplicito di TUTTE le 14 colonne nell'ordine del tuo schema.
+    cursor.execute("""
+        SELECT id, codice, tipo, nome, produttore, provenienza, descrizione, note,
+               codice_barre, foto_path, disponibile, barcode, rig, foto
+        FROM materiali
+    """)
+    materiali = cursor.fetchall()
     conn.close()
-    return risultati
+    return materiali
 
 
 def carica_materiali_per_tipo(tipo):
@@ -201,7 +206,7 @@ def get_materiale_by_id(materiale_id: int) -> dict:
     """
     conn = None
     try:
-        conn = get_connection
+        conn = get_connection()
         conn.row_factory = sqlite3.Row # Per accedere ai risultati come dizionari
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM Materiali WHERE id = ?", (materiale_id,))
@@ -673,3 +678,53 @@ def aggiorna_disponibilita_materiale_by_id(materiale_id: int, disponibilita: int
     finally:
         if conn:
             conn.close()
+
+def aggiorna_materiale(dati):
+    conn = get_connection()
+    cursor = conn.cursor()
+    # MODIFICA QUI: L'ordine dei campi in 'dati' DEVE corrispondere a quello qui sotto.
+    # 'dati' deve contenere 13 valori per i campi da aggiornare, e l'ULTIMO elemento deve essere l'ID.
+    # Esempio ordine dati: (codice, tipo, nome, produttore, provenienza, descrizione, note,
+    #                       codice_barre, foto_path, disponibile, barcode, rig, foto, id)
+    sql = """
+    UPDATE materiali SET
+        codice = ?, tipo = ?, nome = ?, produttore = ?, provenienza = ?,
+        descrizione = ?, note = ?, codice_barre = ?, foto_path = ?,
+        disponibile = ?, barcode = ?, rig = ?, foto = ?  -- AGGIUNTI: disponibile, barcode, foto
+    WHERE id = ?
+    """
+    try:
+        cursor.execute(sql, dati) # Questa execute si aspetta ora 14 valori (13 campi + id)
+        conn.commit()
+    except sqlite3.Error as e:
+        print(f"Errore nell'aggiornamento del materiale: {e}")
+        raise
+    finally:
+        conn.close()
+
+def inserisci_materiale(dati):
+    """
+    Inserisce un nuovo materiale nel database.
+    I dati devono essere una tupla nell'ordine:
+    (codice, tipo, nome, produttore, provenienza, descrizione, note,
+    codice_barre, foto_path, disponibile, barcode, rig, foto_blob_data)
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    sql = """
+    INSERT INTO materiali (
+        codice, tipo, nome, produttore, provenienza, descrizione, note,
+        codice_barre, foto_path, disponibile, barcode, rig, foto
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """
+    try:
+        cursor.execute(sql, dati)
+        conn.commit()
+    except sqlite3.IntegrityError as e:
+        print(f"Errore di integrità nell'inserimento del materiale: {e}")
+        raise # Rilancia l'eccezione in modo che gestione_inventario.py possa gestirla
+    except sqlite3.Error as e:
+        print(f"Errore generico nell'inserimento del materiale: {e}")
+        raise
+    finally:
+        conn.close()
