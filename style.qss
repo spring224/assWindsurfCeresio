@@ -1,0 +1,82 @@
+/* style.qss */
+
+/* Stile generale per la finestra principale (MainWindow) */
+QMainWindow {
+    background-color: #F0F0F0; /* Grigio chiaro per lo sfondo, buono per luce solare */
+    color: #333333; /* Testo scuro per alto contrasto */
+    font-family: "Segoe UI", "Helvetica Neue", "Arial", sans-serif; /* Font pulito simile a Windows */
+    font-size: 14px;
+}
+
+/* Stile per l'area del menu (QTreeWidget) */
+QTreeWidget {
+    background-color: #E0E0E0; /* Grigio leggermente più scuro per il menu */
+    border: 1px solid #CCCCCC; /* Bordo sottile */
+    border-radius: 5px;
+    padding: 5px;
+    margin: 5px;
+    color: #333333;
+    selection-background-color: #0078D7; /* Blu standard di Windows per la selezione */
+    selection-color: #FFFFFF; /* Testo bianco sulla selezione */
+    alternate-background-color: #E8E8E8; /* Strisce alternate se applicabili */
+}
+
+QTreeWidget::item {
+    padding: 5px;
+}
+
+QTreeWidget::item:hover {
+    background-color: #C0DFFF; /* Blu chiaro all'hover */
+}
+
+QTreeWidget::item:selected {
+    background-color: #0078D7;
+    color: #FFFFFF;
+}
+
+/* Stile per l'area del contenuto (QStackedWidget) */
+QStackedWidget {
+    background-color: #FFFFFF; /* Sfondo bianco per il contenuto */
+    border: 1px solid #CCCCCC;
+    border-radius: 5px;
+    padding: 10px;
+    margin: 5px;
+}
+
+/* Stile per QLabel (es. titolo) */
+QLabel {
+    color: #333333;
+}
+
+/* Stile per i pulsanti (es. "Aggiorna", "Chiudi Noleggio") */
+QPushButton {
+    background-color: #0078D7; /* Blu Windows */
+    color: #FFFFFF; /* Testo bianco */
+    border: none;
+    border-radius: 4px;
+    padding: 8px 15px;
+    font-weight: bold;
+}
+
+QPushButton:hover {
+    background-color: #0056B3; /* Blu più scuro all'hover */
+}
+
+QPushButton:pressed {
+    background-color: #004085; /* Blu ancora più scuro al click */
+}
+
+/* Stile per QLineEdit (campi di testo) */
+QLineEdit {
+    border: 1px solid #CCCCCC;
+    border-radius: 3px;
+    padding: 5px;
+    background-color: #FFFFFF;
+    color: #333333;
+}
+
+/* Stile per QDialogButtonBox (pulsanti OK/Cancel nel login) */
+QDialogButtonBox QPushButton {
+    /* Reimposta lo stile predefinito se necessario o lascia che erediti */
+    min-width: 80px; /* Larghezza minima per i pulsanti */
+}

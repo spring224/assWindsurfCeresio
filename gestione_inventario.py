@@ -5,7 +5,15 @@ from PySide6.QtWidgets import (QWidget, QLabel, QLineEdit, QTextEdit, QPushButto
                                QVBoxLayout, QHBoxLayout, QCheckBox, QFileDialog, QTableWidget,
                                QTableWidgetItem, QHeaderView, QMessageBox)
 from PySide6.QtGui import QPixmap
-from data_access import inserisci_materiale, elimina_materiale, carica_materiali, carica_materiali_per_tipo, carica_materiali_rig
+from PySide6.QtCore import Qt
+from data_access import (
+    inserisci_materiale,
+    elimina_materiale,
+    carica_materiali,
+    carica_materiali_per_tipo,
+    carica_materiali_rig,
+    get_materiale_by_id
+)
 from pathlib import Path
 
 
@@ -46,11 +54,13 @@ class AnagraficaMateriali(QWidget):
         self.rig_checkbox.stateChanged.connect(self.toggle_rig)
 
         # --- Pulsanti ---
+        self.btn_aggiungi = QPushButton("Aggiungi Materiale")
         self.btn_salva = QPushButton("Salva")
         self.btn_elimina = QPushButton("Elimina")
         self.btn_aggiorna = QPushButton("Aggiorna Lista")
         self.btn_foto = QPushButton("Carica Foto")
 
+        self.btn_aggiungi.clicked.connect(self.nuovo_materiale)
         self.btn_salva.clicked.connect(self.salva_materiale)
         self.btn_elimina.clicked.connect(self.elimina_selezionato)
         self.btn_aggiorna.clicked.connect(self.carica_tabella)
@@ -63,6 +73,8 @@ class AnagraficaMateriali(QWidget):
                                                 "Provenienza", "Descrizione", "Note", "Codice Barre", "Rig"])
         self.tabella.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tabella.cellClicked.connect(self.carica_dettagli_riga)
+        self.tabella.itemSelectionChanged.connect(self.carica_dettagli_riga)
+
 
         # --- Layout ---
         form_layout = QVBoxLayout()
@@ -90,6 +102,7 @@ class AnagraficaMateriali(QWidget):
         form_layout.addWidget(self.combo_boma)
         form_layout.addWidget(QLabel("Vela"))
         form_layout.addWidget(self.combo_vela)
+        form_layout.addWidget(self.btn_aggiungi)
         form_layout.addWidget(self.btn_salva)
         form_layout.addWidget(self.btn_elimina)
         form_layout.addWidget(self.btn_aggiorna)
@@ -168,69 +181,80 @@ class AnagraficaMateriali(QWidget):
     def salva_materiale(self):
         rig = 1 if self.rig_checkbox.isChecked() else 0
         if rig:
-            cod_alb = self.combo_albero.currentText()
-            cod_bom = self.combo_boma.currentText()
-            cod_vel = self.combo_vela.currentText()
-            codice = cod_alb + cod_bom + cod_vel
-            nome = f"Rig {cod_alb}-{cod_bom}-{cod_vel}"
-            codice_barre = f"{cod_alb}-{cod_bom}-{cod_vel}"
-            tipo = "Rig"
+         cod_alb = self.combo_albero.currentText()
+         cod_bom = self.combo_boma.currentText()
+         cod_vel = self.combo_vela.currentText()
+         codice = cod_alb + cod_bom + cod_vel
+         nome = f"Rig {cod_alb}-{cod_bom}-{cod_vel}"
+         codice_barre = f"{cod_alb}-{cod_bom}-{cod_vel}"
+         tipo = "Rig"
         else:
-            codice = self.codice.text()
-            nome = self.nome.text()
-            tipo = self.tipo.currentText()
-            produttore = self.produttore.text()
-            codice_barre = f"{codice}-{produttore}-{nome}"
+         codice = self.codice.text()
+         nome = self.nome.text()
+         tipo = self.tipo.currentText()
+         produttore = self.produttore.text()
+         codice_barre = f"{codice}-{produttore}-{nome}"
 
         dati = (
-            codice,
-            tipo,
-            nome,
-            self.produttore.text(),
-            self.provenienza.currentText(),
-            self.descrizione.toPlainText(),
-            self.note.toPlainText(),
-            codice_barre,
-            self.foto_path,
-            rig
-        )
-        try:
-            inserisci_materiale(dati)
-            self.carica_tabella()
-        except Exception as e:
-            QMessageBox.critical(self, "Errore salvataggio", str(e))
+         codice,
+         tipo,
+         nome,
+         self.produttore.text(),
+         self.provenienza.currentText(),
+         self.descrizione.toPlainText(),
+         self.note.toPlainText(),
+         codice_barre,
+         self.foto_path,
+         rig
+       )
 
+        try:
+         inserisci_materiale(dati)  # <-- chiamata corretta
+         self.carica_tabella()
+        except Exception as e:
+         QMessageBox.critical(self, "Errore salvataggio", str(e))
+
+    
     def carica_tabella(self):
         self.tabella.setRowCount(0)
 
-    # Ottieni tutti i materiali
         materiali = carica_materiali()
 
-    # Applica i filtri
-        tipo_selezionato = self.filtro_tipo.currentText()
-        nome_filtro = self.filtro_nome.text().lower()
-        produttore_filtro = self.filtro_produttore.text().lower()
-        solo_disponibili = self.filtro_disponibile.isChecked()
+        tipo_selezionato = self.filtro_tipo.currentText() if hasattr(self, "filtro_tipo") else "Tutti"
+        nome_filtro = self.filtro_nome.text().lower() if hasattr(self, "filtro_nome") else ""
+        produttore_filtro = self.filtro_produttore.text().lower() if hasattr(self, "filtro_produttore") else ""
+        solo_disponibili = self.filtro_disponibile.isChecked() if hasattr(self, "filtro_disponibile") else False
 
         materiali_filtrati = []
-        for mat in materiali:
-            tipo, nome, produttore, disponibile = mat[2], mat[3], mat[4], mat[7]  # attenzione agli indici
+        visti = set()
 
+        for mat in materiali:
+            codice = mat[1]
+            nome = mat[3]
+            produttore = mat[4]
+            tipo = mat[2]
+            disponibile = str(mat[7])
+            chiave = (codice, nome)
+
+            if not codice or not nome or chiave in visti:
+                continue
             if tipo_selezionato != "Tutti" and tipo != tipo_selezionato:
-                pass
-            elif nome_filtro and nome_filtro not in nome.lower():
-                pass
-            elif produttore_filtro and produttore_filtro not in produttore.lower():
-                pass
-            elif solo_disponibili and disponibile != "SI":
-                pass
-            else:
-                materiali_filtrati.append(mat)
+                continue
+            if nome_filtro and nome_filtro not in nome.lower():
+                continue
+            if produttore_filtro and produttore_filtro not in produttore.lower():
+                continue
+            if solo_disponibili and disponibile != "1":
+                continue
+
+            visti.add(chiave)
+            materiali_filtrati.append(mat)
 
         for row_idx, row_data in enumerate(materiali_filtrati):
-         self.tabella.insertRow(row_idx)
-        for col_idx, valore in enumerate(row_data):
-            self.tabella.setItem(row_idx, col_idx, QTableWidgetItem(str(valore)))
+            self.tabella.insertRow(row_idx)
+            for col_idx, valore in enumerate(row_data[:10]):
+                self.tabella.setItem(row_idx, col_idx, QTableWidgetItem(str(valore)))
+
 
     def elimina_selezionato(self):
         selected = self.tabella.currentRow()
@@ -268,3 +292,21 @@ class AnagraficaMateriali(QWidget):
             self.foto_label.setPixmap(pixmap.scaled(150, 100, Qt.KeepAspectRatio))
         else:
             self.foto_label.clear()
+
+   
+
+    def nuovo_materiale(self):
+        self.codice.clear()
+        self.nome.clear()
+        self.produttore.clear()
+        self.descrizione.clear()
+        self.note.clear()
+        self.rig_checkbox.setChecked(False)
+        self.tipo.setCurrentIndex(0)
+        self.provenienza.setCurrentIndex(0)
+        self.combo_albero.setCurrentIndex(0)
+        self.combo_boma.setCurrentIndex(0)
+        self.combo_vela.setCurrentIndex(0)
+        self.foto_label.clear()
+        self.foto_path = ""
+    

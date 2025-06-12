@@ -2,6 +2,7 @@
 import sqlite3
 import os
 from pathlib import Path  # ✅ nuova riga
+from datetime import datetime
 
 BASE_DIR = Path(__file__).resolve().parent
 DB_PATH = BASE_DIR / "gestione_dati" / "applicazionedb.db"
@@ -119,24 +120,12 @@ def save_socio_photo_blob(id_socio, blob_data):
     pass
 
 
-def inserisci_materiale(codice, tipo, nome, produttore, provenienza, descrizione, note, barcode, rig, foto_blob):
+def inserisci_materiale(dati):
     conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO materiali (
-            codice, tipo, nome, produttore, provenienza, 
-            descrizione, note, barcode, rig, foto
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    """, (
-        codice, tipo, nome, produttore, provenienza,
-        descrizione, note, barcode, rig,
-        sqlite3.Binary(foto_blob) if foto_blob else None
-    ))
+    cur = conn.cursor()
+    cur.execute("INSERT INTO materiali (codice, tipo, nome, produttore, provenienza, descrizione, note, codice_barre, foto_path, rig) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", dati)
     conn.commit()
     conn.close()
-
-
-
 
 
 def elimina_materiale(id_materiale):
@@ -168,6 +157,24 @@ def carica_materiali_per_tipo(tipo):
     conn.close()
     return risultati
 
+def get_materiali_disponibili():
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, codice, nome, tipo, produttore ,descrizione , note FROM materiali WHERE disponibile = 1")
+    rows = cursor.fetchall()
+    return [
+        {
+            "id": r[0],
+            "codice": r[1],
+            "nome": r[2],
+            "tipo": r[3],
+            "produttore": r[4],
+            "descrizione": r[5],
+            "note": r[6]
+        }
+        for r in rows
+    ]
+
 def carica_materiali_rig():
     conn = get_connection()
     cursor = conn.cursor()
@@ -186,14 +193,28 @@ def recupera_foto_materiale(id_materiale):
         return risultato[0]  # BLOB
     return None
 
-def get_materiale_by_id(id_materiale):
-    conn = get_connection()
-    conn.row_factory = sqlite3.Row
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM materiali WHERE id = ?", (id_materiale,))
-    result = cursor.fetchone()
-    conn.close()
-    return result
+def get_materiale_by_id(materiale_id: int) -> dict:
+    """
+    Recupera un materiale dal database dato il suo ID.
+    :param materiale_id: L'ID del materiale.
+    :return: Un dizionario con i dati del materiale o None se non trovato.
+    """
+    conn = None
+    try:
+        conn = get_connection
+        conn.row_factory = sqlite3.Row # Per accedere ai risultati come dizionari
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM Materiali WHERE id = ?", (materiale_id,))
+        materiale_row = cursor.fetchone()
+        if materiale_row:
+            return dict(materiale_row)
+        return None
+    except sqlite3.Error as e:
+        print(f"ERRORE (data_access): Errore nel recupero materiale per ID {materiale_id}: {e}")
+        return None
+    finally:
+        if conn:
+            conn.close()
 
 #Sezione Gestione Noleggi
 
@@ -216,65 +237,210 @@ def aggiorna_disponibilita_materiale(id_materiale, disponibile):
     conn.commit()
     conn.close()
 
-def get_materiale_by_barcode(barcode):
+def get_materiale_by_barcode(codice):
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM Materiali WHERE codice_barre = ?", (barcode,))
+    cursor.execute("SELECT id, codice, nome, tipo, produttore, descrizione, note FROM materiali WHERE codice = ?", (codice,))
     result = cursor.fetchone()
     conn.close()
-    return dict(result) if result else None
 
-def aggiorna_disponibilita_materiale(id_materiale, disponibile):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE Materiali SET disponibile = ? WHERE id = ?", (disponibile, id_materiale))
-    conn.commit()
-    conn.close()
-
-def inserisci_noleggio(nome, cognome, id_materiale, codice_materiale,
-                       data, ora, durata, percorso_documento, lingua, pagamento):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO Noleggi (
-            nome_cliente, cognome_cliente, id_materiale, codice_materiale,
-            data_inizio, ora_inizio, durata_ore, percorso_documento,
-            lingua_privacy, metodo_pagamento, stato
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'attivo')
-    """, (nome, cognome, id_materiale, codice_materiale, data, ora, durata,
-          percorso_documento, lingua, pagamento))
-    conn.commit()
-    conn.close()
+    if result:
+        # Costruiamo il dizionario esplicitamente usando i nomi delle colonne.
+        # c.description contiene una tupla di 7-elementi per ogni colonna (nome, tipo_db, ecc.)
+        # Estraiamo solo il nome della colonna (l'elemento 0 di ogni tupla)
+        columns = [description[0] for description in cursor.description]
+        
+        # Creiamo un dizionario zippando i nomi delle colonne con i valori della riga
+        # Questo garantisce un dizionario standard Python
+        return dict(zip(columns, result))
+    else:
+        return None # Ritorna None se il materiale non è trovato
 
     #Situazione Noleggi
 
-def get_noleggi_attivi():
+def get_noleggi_attivi() -> list:
+    """
+    Recupera tutti i noleggi attivi con i dettagli dei materiali associati.
+    Un noleggio è considerato attivo se stato = 'attivo' nella tabella Noleggi.
+    :return: Una lista di dizionari, dove ogni dizionario rappresenta un noleggio
+             e include una lista dei suoi materiali.
+    """
+    conn = None
+    noleggi_attivi = []
+    try:
         conn = get_connection()
-        conn.row_factory = sqlite3.Row
-        cursor = conn.cursor()   
-        cursor.execute("SELECT * FROM Noleggi WHERE stato = 'attivo'")
-        righe = cursor.fetchall()
+        conn.row_factory = sqlite3.Row # Per accedere ai risultati come dizionari
+        cursor = conn.cursor()
+
+        # Query CORRETTA con il nome della tabella 'dettagli_noleggio'
+        sql_query = """
+            SELECT 
+                n.id AS noleggio_id,
+                n.nome_cliente,
+                n.cognome_cliente,
+                n.data_noleggio,
+                n.ora_inizio,
+                n.durata_ore,
+                n.metodo_pagamento,
+                n.importo_totale,
+                n.lingua,
+                n.percorso_documento AS percorso_documento_privacy,
+                dn.id_materiale,
+                dn.codice_materiale
+            FROM Noleggi n
+            LEFT JOIN dettagli_noleggio dn ON n.id = dn.id_noleggio -- *** CORREZIONE QUI: dettagli_noleggio (singolare) ***
+            WHERE n.stato = 'attivo'
+            ORDER BY n.id, dn.id_materiale;
+        """
+        
+        print(f"DEBUG (data_access): Esecuzione query: {sql_query}")
+        cursor.execute(sql_query)
+
+        rows = cursor.fetchall()
+        
+        # Raggruppa i dati per noleggio
+        noleggi_map = {}
+        for row in rows:
+            noleggio_id = row['noleggio_id']
+            if noleggio_id not in noleggi_map:
+                noleggi_map[noleggio_id] = {
+                    "id": noleggio_id,
+                    "nome_cliente": row['nome_cliente'],
+                    "cognome_cliente": row['cognome_cliente'],
+                    "data_noleggio": row['data_noleggio'],
+                    "ora_inizio": row['ora_inizio'],
+                    "durata_ore": row['durata_ore'],
+                    "metodo_pagamento": row['metodo_pagamento'],
+                    "importo_totale": row['importo_totale'],
+                    "lingua": row['lingua'],
+                    "percorso_documento_privacy": row['percorso_documento_privacy'],
+                    "materiali": [] # Lista per i materiali associati
+                }
+            
+            # Aggiungi i dettagli del materiale solo se esistono (LEFT JOIN)
+            if row['id_materiale'] is not None:
+                materiale_info = {
+                    "id_materiale": row['id_materiale'],
+                    "codice": row['codice_materiale'],
+                    "nome": get_materiale_by_id(row['id_materiale']).get('nome', 'Materiale Sconosciuto')
+                }
+                noleggi_map[noleggio_id]["materiali"].append(materiale_info)
+            
+        noleggi_attivi = list(noleggi_map.values())
+        print(f"DEBUG (data_access): Recuperati {len(noleggi_attivi)} noleggi attivi.")
+        return noleggi_attivi
+
+    except sqlite3.Error as e:
+        print(f"ERRORE CRITICO (data_access - get_noleggi_attivi): Errore SQL: {e}")
+        return []
+    finally:
+        if conn:
+            conn.close()
+
+def chiudi_noleggio(noleggio_id: int) -> bool:
+    """
+    Chiude un noleggio e libera i materiali associati.
+    :param noleggio_id: L'ID del noleggio da chiudere.
+    :return: True se l'operazione ha successo, False altrimenti.
+    """
+    conn = None
+    try:
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        # 1. Aggiorna lo stato del noleggio a 'chiuso'
+        cursor.execute("""
+            UPDATE Noleggi
+            SET stato = 'chiuso'
+            WHERE id = ?
+        """, (noleggio_id,))
+        
+        # 2. Recupera tutti gli ID dei materiali associati a questo noleggio dalla tabella dettagli_noleggio
+        cursor.execute("""
+            SELECT id_materiale FROM dettagli_noleggio WHERE id_noleggio = ?
+        """, (noleggio_id,))
+        material_ids_to_release = cursor.fetchall()
+
+        # 3. Per ogni materiale, aggiorna la sua disponibilità a 1 (disponibile)
+        for row in material_ids_to_release:
+            materiale_id = row['id_materiale'] # Accedi come dizionario grazie a row_factory
+            if not aggiorna_disponibilita_materiale_by_id(materiale_id, 1): # 1 significa 'disponibile'
+                print(f"ATTENZIONE: Impossibile aggiornare la disponibilità per il materiale ID {materiale_id} del noleggio {noleggio_id}.")
+                # Potresti voler gestire questo errore in modo più robusto, es. rollback o log.
+        
+        conn.commit() # Commit finale dopo tutte le operazioni
+        print(f"DEBUG (data_access - chiudi_noleggio): Noleggio ID {noleggio_id} chiuso e materiali liberati.")
+        return True
+    except sqlite3.Error as e:
+        print(f"ERRORE (data_access - chiudi_noleggio): Errore nella chiusura del noleggio {noleggio_id} o liberazione materiali: {e}")
+        conn.rollback() # Esegue il rollback in caso di errore
+        return False
+    finally:
+        if conn:
+            conn.close()
+
+
+
+def salva_ricevuta(
+    numero_ricevuta_prog_int,  # Valore per la colonna 'numero_ricevuta' (es. 1)
+    anno_ricevuta_prog_int,    # Valore per la colonna 'anno_ricevuta' (es. 2024)
+    nome_cliente,
+    cognome_cliente,
+    data_creazione_str,    # Valore per la colonna 'data_creazione' (es. "2025-06-11")
+    ora_ricevuta_str,      # Valore per la colonna 'ora_ricevuta' (es. "09:47")
+    durata_ore,
+    metodo_pagamento,
+    importo_totale,
+    percorso_file_pdf,
+    id_noleggio_associato, # Valore per la colonna 'id_noleggio'
+    numero_ricevuta_testo, # Valore per la colonna 'numero' (es. "0001/2024")
+    anno_ricevuta_da_testo # Valore per la colonna 'anno' (l'anno numerico dalla stringa "0001/2024")
+): 
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+        cur.execute('''
+            INSERT INTO Ricevute (
+                numero,           
+                anno,             
+                percorso_pdf,
+                id_noleggio,
+                data_creazione,   
+                nome_cliente,
+                cognome_cliente,
+                durata_ore,
+                metodo_pagamento,
+                importo_totale,
+                numero_ricevuta,  
+                anno_ricevuta,    
+                ora_ricevuta      
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            numero_ricevuta_testo,     # -> numero TEXT
+            anno_ricevuta_da_testo,    # -> anno INTEGER
+            percorso_file_pdf,         # -> percorso_pdf TEXT
+            id_noleggio_associato,     # -> id_noleggio INTEGER
+            data_creazione_str,        # -> data_creazione TEXT
+            nome_cliente,              # -> nome_cliente TEXT
+            cognome_cliente,           # -> cognome_cliente TEXT
+            durata_ore,                # -> durata_ore INTEGER
+            metodo_pagamento,          # -> metodo_pagamento TEXT
+            importo_totale,            # -> importo_totale REAL
+            numero_ricevuta_prog_int,  # -> numero_ricevuta INTEGER
+            anno_ricevuta_prog_int,    # -> anno_ricevuta INTEGER
+            ora_ricevuta_str           # -> ora_ricevuta TEXT
+        ))
+        conn.commit()
+        print(f"DEBUG: Ricevuta {numero_ricevuta_testo} salvata nel DB.")
+    except sqlite3.IntegrityError as e:
+        print(f"Errore: Tentativo di salvare una ricevuta duplicata o violazione UNIQUE: {e}")
+    except Exception as e:
+        print(f"Errore durante il salvataggio della ricevuta nel DB: {e}")
+    finally:
         conn.close()
-        return righe
 
-def chiudi_noleggio(id_noleggio, id_materiale):
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE Noleggi SET stato = 'chiuso' WHERE id = ?", (id_noleggio,))
-    cursor.execute("UPDATE Materiali SET disponibile = 1 WHERE id = ?", (id_materiale,))
-    conn.commit()
-    conn.close()
-
-def salva_ricevuta(numero, anno, id_noleggio, percorso_pdf):
-    from datetime import datetime
-    conn = get_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO Ricevute (numero, anno, id_noleggio, percorso_pdf, data_creazione)
-        VALUES (?, ?, ?, ?, ?)
-    """, (numero, anno, id_noleggio, percorso_pdf, datetime.now().isoformat()))
-    conn.commit()
-    conn.close()
 
 def get_prossimo_numero_ricevuta(anno):
     conn = get_connection()
@@ -339,3 +505,171 @@ def aggiorna_importo_noleggio(id_noleggio, importo):
     cur.execute("UPDATE Noleggi SET importo_calcolato = ? WHERE id = ?", (importo, id_noleggio))
     conn.commit()
     conn.close()
+
+def inserisci_dettaglio_noleggio(id_noleggio, id_materiale, codice_materiale):
+    conn = get_connection()
+    cur = conn.cursor()
+    cur.execute('''
+        INSERT INTO DettagliNoleggio (id_noleggio, id_materiale, codice_materiale)
+        VALUES (?, ?, ?)
+    ''', (id_noleggio, id_materiale, codice_materiale))
+    conn.commit()
+    conn.close()
+
+
+def get_prossimo_numero_ricevuta():
+    conn = get_connection()
+    anno_corrente = datetime.now().year
+    prossimo_numero = 1
+
+    try:
+        # Tenta di leggere l'ultimo numero per l'anno corrente
+        cur = conn.execute("SELECT UltimoNumeroRicevuta FROM Contatori WHERE Anno = ?", (anno_corrente,))
+        riga = cur.fetchone()
+
+        if riga:
+            # Se l'anno esiste, incrementa l'ultimo numero
+            prossimo_numero = riga[0] + 1
+            cur.execute("UPDATE Contatori SET UltimoNumeroRicevuta = ? WHERE Anno = ?", (prossimo_numero, anno_corrente))
+        else:
+            # Se l'anno non esiste, inizia da 1 e inserisci la nuova riga
+            cur.execute("INSERT INTO Contatori (Anno, UltimoNumeroRicevuta) VALUES (?, ?)", (anno_corrente, 1))
+
+        conn.commit()
+        return f"{prossimo_numero:04d}/{anno_corrente}" # Formatta come 0001/2025
+    except sqlite3.Error as e:
+        # QUESTO È IL DEBUG FONDAMENTALE: Stampa l'errore specifico del DB
+        print(f"ERRORE SQL in get_prossimo_numero_ricevuta: {e}")
+        conn.rollback()
+        return None # O gestisci l'errore in modo diverso
+    finally:
+        conn.close()
+
+    
+    #Nuove funzioni per la gestione del Noleggio
+
+
+def inserisci_noleggio(
+    nome_cliente, cognome_cliente, data_noleggio, ora_noleggio, durata_ore,
+    percorso_documento_privacy, lingua, metodo_pagamento, importo_totale,
+    data_inizio,       # Questo l'abbiamo aggiunto prima
+    ora_inizio         # <--- AGGIUNTO ANCHE QUESTO PARAMETRO ORA
+    ):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO Noleggi (
+                nome_cliente,
+                cognome_cliente,
+                data_inizio,
+                ora_inizio,        -- Ora questo corrisponde al parametro
+                durata_ore,
+                stato,
+                metodo_pagamento,
+                importo_totale,
+                data_creazione,
+                percorso_documento,
+                lingua,
+                data_noleggio
+            ) VALUES (?, ?, ?, ?, ?, 'attivo', ?, ?, CURRENT_TIMESTAMP, ?, ?, ?)
+        """, (nome_cliente, cognome_cliente,
+              data_inizio,
+              ora_inizio,        # <--- USIAMO IL NUOVO PARAMETRO QUI
+              durata_ore,
+              metodo_pagamento,
+              importo_totale,
+              percorso_documento_privacy,
+              lingua,
+              data_noleggio))
+
+        conn.commit()
+        return cursor.lastrowid
+    except sqlite3.Error as e:
+        print(f"Errore inserimento noleggio: {e}")
+        return None
+    finally:
+        if conn:
+            conn.close()
+
+
+def inserisci_dettaglio_noleggio(id_noleggio, id_materiale, codice_materiale):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            INSERT INTO DettagliNoleggio (id_noleggio, id_materiale, codice_materiale)
+            VALUES (?, ?, ?)
+        """, (id_noleggio, id_materiale, codice_materiale))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore inserimento dettaglio noleggio: {e}")
+        return False
+    finally:
+        conn.close()
+
+def aggiorna_disponibilita_materiale(id_materiale, disponibilita):
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            UPDATE Materiali SET disponibile = ? WHERE id = ?
+        """, (disponibilita, id_materiale))
+        conn.commit()
+        return True
+    except sqlite3.Error as e:
+        print(f"Errore aggiornamento disponibilità materiale: {e}")
+        return False
+    finally:
+        conn.close()
+
+def get_dettagli_materiali_by_noleggio_id(id_noleggio):
+    """
+    Recupera tutti i materiali (ID e codice) associati a un noleggio specifico
+    dalla tabella dettagli_noleggio.
+    Ritorna una lista di tuple (id_materiale, codice_materiale).
+    """
+    conn = get_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute("""
+            SELECT id_materiale, codice_materiale
+            FROM dettagli_noleggio
+            WHERE id_noleggio = ?
+        """, (id_noleggio,))
+        materiali_dettaglio = cursor.fetchall()
+        return materiali_dettaglio # Ritorna una lista di tuple, es: [(1, 'S001'), (2, 'V005')]
+    except sqlite3.Error as e:
+        print(f"Errore recupero dettagli materiali per noleggio {id_noleggio}: {e}")
+        return []
+    finally:
+        conn.close()
+
+def aggiorna_disponibilita_materiale_by_id(materiale_id: int, disponibilita: int) -> bool:
+    """
+    Aggiorna lo stato di disponibilità di un materiale dato il suo ID nel database.
+    :param materiale_id: L'ID numerico del materiale nel database.
+    :param disponibilita: 0 per non disponibile, 1 per disponibile.
+    :return: True se l'aggiornamento ha avuto successo, False altrimenti.
+    """
+    conn = None
+    try:
+        conn = get_connection
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            UPDATE Materiali
+            SET disponibilita = ?
+            WHERE id = ?
+        """, (disponibilita, materiale_id))
+
+        conn.commit()
+        print(f"DEBUG (data_access): Materiale ID {materiale_id} aggiornato a disponibilita={disponibilita}.")
+        return True
+    except sqlite3.Error as e:
+        print(f"ERRORE (data_access): Errore nell'aggiornare disponibilità materiale ID {materiale_id}: {e}")
+        return False
+    finally:
+        if conn:
+            conn.close()

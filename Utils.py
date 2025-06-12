@@ -1,81 +1,79 @@
-from fpdf import FPDF
-import os
-from datetime import datetime
-from pathlib import Path
+# Utils.py (Aggiornato: contiene solo funzioni OCR e Camera)
+
+import cv2
+import pytesseract
+from PySide6.QtWidgets import QFileDialog, QMessageBox # Mantenuto QFileDialog qui se la funzione OCR lo usa internamente
 
 
+# Funzioni OCR
+def processa_immagine_ocr(file_path):
+    """
+    Elabora un'immagine tramite OCR e restituisce un dizionario con 'nome' e 'cognome' estratti.
+    Restituisce (None, messaggio_errore) in caso di problemi, altrimenti (dati_estratti, None).
+    """
+    if not file_path:
+        return None, "Nessun file immagine fornito."
 
-def genera_ricevuta_pdf(numero, nome, cognome, materiale, data, ora, durata, pagamento, output_dir="Ricevute_Noleggi"):
+    try:
+        img = cv2.imread(file_path)
+        if img is None:
+            return None, "Impossibile leggere l'immagine. Assicurati che il percorso sia corretto e il file non sia corrotto."
+        
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        
+        # Puoi aggiungere qui pre-processing avanzati per l'OCR se necessario (es. binarizzazione, denoising)
+        # Esempio: _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # text = pytesseract.image_to_string(thresh, lang='ita+eng')
 
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+        text = pytesseract.image_to_string(gray, lang='ita+eng') # Puoi specificare più lingue
 
-    filename = f"Ricevuta_{numero.replace('/', '_')}.pdf"
-    percorso = output_dir / filename
+        nome_estratto = ""
+        cognome_estratto = ""
+        
+        lines = text.split('\n')
+        nome_found = False
+        cognome_found = False
+        
+        # Tentativo di estrazione nome/cognome con etichette esplicite
+        for line in lines:
+            if "nome" in line.lower() and not nome_found:
+                parts = line.split(':')
+                if len(parts) > 1:
+                    nome_estratto = parts[1].strip()
+                    nome_found = True
+            if "cognome" in line.lower() and not cognome_found:
+                parts = line.split(':')
+                if len(parts) > 1:
+                    cognome_estratto = parts[1].strip()
+                    cognome_found = True
+            if nome_found and cognome_found:
+                break
 
-    filename = f"Ricevuta_{numero.replace('/', '_')}.pdf"
-    percorso = os.path.join(output_dir, filename)
+        # Logica di fallback: estrai le prime due parole non numeriche se non trovati con etichette
+        if not nome_found and not cognome_found:
+            words = [word for word in text.split() if word.isalpha() and len(word) > 2] # Filtra parole lunghe e solo alfabetiche
+            if len(words) >= 2:
+                nome_estratto = words[0]
+                cognome_estratto = words[1]
+            elif len(words) == 1:
+                cognome_estratto = words[0] # Se c'è solo una parola, la metto nel cognome
+                
+        return {'nome': nome_estratto, 'cognome': cognome_estratto}, None
 
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
+    except Exception as e:
+        return None, f"Errore durante l'elaborazione OCR: {e}"
 
-    pdf.cell(200, 10, txt="Ricevuta Noleggio", ln=True, align="C")
-    pdf.ln(10)
-    pdf.cell(100, 10, f"N. Ricevuta: {numero}", ln=True)
-    pdf.cell(100, 10, f"Data: {data} alle {ora}", ln=True)
-    pdf.cell(100, 10, f"Cliente: {nome} {cognome}", ln=True)
-    pdf.cell(100, 10, f"Materiale: {materiale}", ln=True)
-    pdf.cell(100, 10, f"Durata: {durata} ore", ln=True)
-    pdf.cell(100, 10, f"Pagamento: {pagamento}", ln=True)
+# Funzioni Camera (attualmente segnaposto)
+def camera_open():
+    """
+    Funzione segnaposto per l'apertura della camera.
+    """
+    print("Camera aperta (simulato).")
+    pass
 
-    pdf.output(percorso)
-    return percorso
-
-def calcola_prossimo_numero(anno, directory="Ricevute_Noleggi"):
-    os.makedirs(directory, exist_ok=True)
-    count = 1
-    for nome_file in os.listdir(directory):
-        if nome_file.endswith(".pdf") and f"/{anno}" in nome_file.replace("_", "/"):
-            count += 1
-    return f"{count:02}/{anno}"
-
-def stampa_ricevuta(self):
-    from utils import genera_ricevuta_pdf
-    from data_access import get_materiale_by_barcode, get_prossimo_numero_ricevuta, salva_ricevuta
-    from datetime import datetime
-
-    nome = self.txt_nome.text().strip()
-    cognome = self.txt_cognome.text().strip()
-    barcode = self.txt_barcode.text().strip()
-    durata = self.spin_durata.value()
-    pagamento = self.pagamento_scelto or "N/D"
-    data = self.date_edit.date().toString("yyyy-MM-dd")
-    ora = self.time_edit.time().toString("HH:mm")
-
-    if not nome or not cognome or not barcode:
-        QMessageBox.warning(self, "Dati mancanti", "Completa tutti i dati prima di stampare la ricevuta.")
-        return
-
-    materiale = get_materiale_by_barcode(barcode)
-    if not materiale:
-        QMessageBox.warning(self, "Errore", "Materiale non trovato.")
-        return
-
-    materiale_str = f"{materiale['tipo']} {materiale['nome']} ({materiale['produttore']})"
-    anno_corrente = datetime.now().year
-    numero = get_prossimo_numero_ricevuta(anno_corrente)
-
-    path_pdf = genera_ricevuta_pdf(
-        numero, nome, cognome, materiale_str,
-        data, ora, durata, pagamento
-    )
-
-    # Recupera id_noleggio attivo per quel cliente+materiale+data
-    from data_access import get_noleggio_attivo_per_cliente
-    noleggio = get_noleggio_attivo_per_cliente(nome, cognome, barcode)
-    if noleggio:
-        salva_ricevuta(numero, anno_corrente, noleggio["id"], path_pdf)
-        QMessageBox.information(self, "Ricevuta generata", f"Ricevuta {numero} salvata in:\n{path_pdf}")
-    else:
-        QMessageBox.warning(self, "Attenzione", "Ricevuta generata ma nessun noleggio attivo associato trovato.")
+def camera_close():
+    """
+    Funzione segnaposto per la chiusura della camera.
+    """
+    print("Camera chiusa (simulato).")
+    pass
