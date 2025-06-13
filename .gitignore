@@ -1,23 +1,43 @@
-# Python
+# ========== Python ========== #
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 *.db-journal
 
-# PyInstaller
-/build/
-/dist/
-*.spec
-
-# Virtualenv
+# ========== Virtual Environment ========== #
+.venv/
 venv/
 env/
+*.egg-info/
+*.egg
 
-# OS
+# ========== VS Code ========== #
+.vscode/
+.history/
+
+# ========== macOS ========== #
 .DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
 
-# IDE
-.vscode/
-.idea/
+# ========== Build & Packaging ========== #
+build/
+dist/
+*.spec
+
+# ========== Ricevute & Output ========== #
+Ricevute_Noleggi/*.pdf
+
+# ========== File temporanei duplicati ========== #
+*Sorgenti Prima Modifica/*copia*
+*Sorgenti Prima Modifica/*\ *
+
+# ========== DB editor file ========== #
+*.sqbpro
