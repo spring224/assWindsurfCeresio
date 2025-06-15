@@ -3,11 +3,12 @@ import shutil
 import sqlite3
 from PySide6.QtWidgets import (QWidget, QLabel, QLineEdit, QTextEdit, QPushButton, QComboBox,
                                QVBoxLayout, QHBoxLayout, QCheckBox, QFileDialog, QTableWidget,
-                               QTableWidgetItem, QHeaderView, QMessageBox, QGroupBox, QSpacerItem, QSizePolicy, QAbstractItemView)
+                               QTableWidgetItem, QHeaderView, QMessageBox, QGroupBox,
+                                QSpacerItem, QSizePolicy, QAbstractItemView, QScrollArea, QScrollBar) # Aggiunto QGroupBox, QSpacerItem, QSizePolicy
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt
 from data_access import (
-    inserisci_materiale, 
+    inserisci_materiale,
     elimina_materiale,
     carica_materiali,
     carica_materiali_per_tipo,
@@ -58,12 +59,14 @@ class AnagraficaMateriali(QWidget):
         self.rig_checkbox.stateChanged.connect(self.toggle_rig)
 
         # --- Pulsanti ---
-        self.btn_crea_o_salva_nuovo = QPushButton("Crea Nuovo Materiale") # Pulsante con doppia funzione
+        # MODIFICA QUI: Rinomina i pulsanti come nell'ultima versione corretta
+        self.btn_crea_o_salva_nuovo = QPushButton("Crea Nuovo Materiale") 
         self.btn_salva_modifiche = QPushButton("Salva Modifiche")     
         self.btn_elimina = QPushButton("Elimina Selezionato")
         self.btn_carica_foto = QPushButton("Carica Foto")
 
         # Connessioni dei pulsanti alle funzioni
+        # MODIFICA QUI: Connessioni ai nuovi nomi dei pulsanti
         self.btn_crea_o_salva_nuovo.clicked.connect(self.handle_crea_o_salva_nuovo_click) 
         self.btn_salva_modifiche.clicked.connect(self.salva_modifiche_materiale_action) 
         self.btn_elimina.clicked.connect(self.elimina_selezionato)
@@ -106,7 +109,7 @@ class AnagraficaMateriali(QWidget):
         foto_layout.addWidget(self.foto_label)
         form_layout.addLayout(foto_layout)
 
-        # Pulsanti di azione in un GroupBox per maggiore stabilità nel layout
+        # MODIFICA QUI: Raggruppa i pulsanti in un QGroupBox per una migliore gestione del layout
         button_group_box = QGroupBox("Azioni Materiale")
         button_form_layout = QVBoxLayout()
         button_form_layout.addWidget(self.btn_crea_o_salva_nuovo) 
@@ -114,7 +117,19 @@ class AnagraficaMateriali(QWidget):
         button_form_layout.addWidget(self.btn_elimina)
         button_group_box.setLayout(button_form_layout)
         form_layout.addWidget(button_group_box) # Aggiungi il GroupBox dei pulsanti
-        form_layout.addStretch(1) # Stretch per spingere il contenuto in alto
+
+        # MODIFICA QUI: Aggiungi uno spacer per spingere tutto il contenuto form in alto
+        form_layout.addStretch(1) 
+        # --- INIZIO MODIFICA: Inserimento QScrollArea ---
+        # 1. Crea un widget contenitore per il nostro form
+        form_container = QWidget()
+        form_container.setLayout(form_layout)
+
+        # 2. Crea la QScrollArea e inserisci il contenitore al suo interno
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)  # Impostazione FONDAMENTALE
+        scroll_area.setWidget(form_container)
+        # --- FINE MODIFICA --
 
         # --- Tabella ---
         self.tabella = QTableWidget()
@@ -124,7 +139,15 @@ class AnagraficaMateriali(QWidget):
             "Descrizione", "Note", "Codice Barre", "Foto Path", "Disponibile",
             "Barcode", "Rig", "Foto BLOB"
         ])
-        self.tabella.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        #self.tabella.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        # Imposta la modalità di ridimensionamento predefinita su Interattiva
+        header = self.tabella.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.Interactive)  
+        # Imposta solo la colonna "Nome" (che è la colonna 3) per espandersi
+        # Le colonne visibili sono: Codice(1), Tipo(2), Nome(3), Produttore(4), ecc.
+        header.setSectionResizeMode(3, QHeaderView.Stretch) 
+
+         
         self.tabella.setEditTriggers(QAbstractItemView.NoEditTriggers) 
         self.tabella.cellClicked.connect(self.carica_dettagli_riga) 
         
@@ -168,6 +191,7 @@ class AnagraficaMateriali(QWidget):
 
         # Layout principale
         main_layout = QHBoxLayout(self)
+        main_layout.addWidget(scroll_area, 2) #
         
         # Aggiungi il layout del form a sinistra
         main_layout.addLayout(form_layout, 1)
@@ -176,7 +200,8 @@ class AnagraficaMateriali(QWidget):
         table_section_layout = QVBoxLayout()
         table_section_layout.addLayout(filtro_layout)
         table_section_layout.addWidget(self.tabella)
-        main_layout.addLayout(table_section_layout, 3)
+        # Assegna un fattore di stretch maggiore alla tabella, es. 3 o 4.
+        main_layout.addLayout(table_section_layout, 4) 
 
         # Inizializzazione stato dei pulsanti (CHIAMATA UNA SOLA VOLTA ALL'AVVIO)
         self.nuovo_materiale() 

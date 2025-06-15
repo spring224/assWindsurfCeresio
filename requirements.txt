@@ -1,0 +1,9 @@
+PySide6
+fpdf
+qrcode
+python-barcode
+opencv-python
+codicefiscale
+reportlab
+pillow
+pytesseract

@@ -3,14 +3,15 @@
 from PySide6.QtWidgets import (
     QWidget, QLabel, QLineEdit, QPushButton, QVBoxLayout, QHBoxLayout,
     QFileDialog, QDateEdit, QTimeEdit, QSpinBox, QComboBox,
-    QTableWidget, QTableWidgetItem, QMessageBox, QDialog, QGridLayout, QFormLayout, QGroupBox
+    QTableWidget, QTableWidgetItem, QMessageBox, QDialog, QGridLayout, QFormLayout, QGroupBox,
+    QScrollArea # Aggiunto QScrollArea
 )
-from PySide6.QtCore import QDate, QTime, Qt # Aggiunto Qt per allineamento
+from PySide6.QtCore import QDate, QTime, Qt
 import datetime
 import cv2
 import os
 import pytesseract
-from datetime import datetime as dt_now # Rinominato per evitare conflitti con PySide6.QtCore.QTime
+from datetime import datetime as dt_now
 from data_access import inserisci_noleggio, aggiorna_disponibilita_materiale, get_materiale_by_barcode, get_prezzo_orario_by_tipo, get_prossimo_numero_ricevuta, salva_ricevuta ,inserisci_dettaglio_noleggio
 from avvio_noleggio import finalizza_noleggio
 from seleziona_materiale_disponibile import SelezionaMaterialeDisponibile
@@ -22,20 +23,19 @@ class NoleggioMateriale(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Associazione Windsurf Ceresio Noleggio Materiale")
-        self.materiali_noleggiati = [] # Lista di tuple (id_db, codice, nome, tipo, produttore, descrizione)
+        self.materiali_noleggiati = []
         self.privacy_stampata = False
         self.ricevuta_stampata = False
-        self.pagamento_scelto = None # Per memorizzare il metodo di pagamento selezionato
-        self.importo_totale_noleggio = 0.0 # Per memorizzare l'importo totale calcolato
-         # <<< AGGIUNGI QUESTE INIZIALIZZAZIONI MANCANTI >>>
-        self.id_noleggio_corrente = None # Questo è l'ID del noleggio corrente nel database
-        self.percorso_doc_privacy = None # Questo memorizzerà il percorso del documento privacy stampato
-        self.id_noleggio_corrente = None # <<< QUESTA DEVE ESSERCI E NON COMMENTATA
-        # <<< FINE AGGIUNTE >>>c
+        self.pagamento_scelto = None
+        self.importo_totale_noleggio = 0.0
+        self.id_noleggio_corrente = None
+        self.percorso_doc_privacy = None
         self.init_ui()
 
     def init_ui(self):
-        layout_main = QVBoxLayout()
+        # 1. Crea un QVBoxLayout che conterrà tutti i GroupBox del tuo form.
+        # Questo sarà il layout interno che vogliamo rendere scorrevole.
+        content_layout = QVBoxLayout()
 
         # 📸 Acquisizione e OCR (Group Box)
         group_ocr = QGroupBox("Dati Cliente da Documento")
@@ -50,81 +50,84 @@ class NoleggioMateriale(QWidget):
         layout_ocr.addRow("Cognome:", self.txt_cognome_ocr)
 
         btn_acquisisci_documento = QPushButton("📷 Acquisisci Documento & OCR")
-        btn_acquisisci_documento.clicked.connect(self.acquisisci_documento_da_webcam) # Collegato alla tua funzione esistente
+        btn_acquisisci_documento.clicked.connect(self.acquisisci_documento_da_webcam)
         layout_ocr.addRow(btn_acquisisci_documento)
         group_ocr.setLayout(layout_ocr)
-        layout_main.addWidget(group_ocr)
-        
+        content_layout.addWidget(group_ocr) # AGGIUNTO A content_layout
+
         # 📝 Dati Manuali Cliente (Group Box)
         group_manuale = QGroupBox("Dati Cliente Manuali")
         layout_manuale = QFormLayout()
         
         self.txt_nome = QLineEdit()
         self.txt_nome.setPlaceholderText("Nome Cliente")
-        self.txt_nome.textChanged.connect(self.verifica_condizioni_avvio) # Aggiunto per abilitazione pulsanti
+        self.txt_nome.textChanged.connect(self.verifica_condizioni_avvio)
         layout_manuale.addRow("Nome:", self.txt_nome)
 
         self.txt_cognome = QLineEdit()
         self.txt_cognome.setPlaceholderText("Cognome Cliente")
-        self.txt_cognome.textChanged.connect(self.verifica_condizioni_avvio) # Aggiunto per abilitazione pulsanti
+        self.txt_cognome.textChanged.connect(self.verifica_condizioni_avvio)
         layout_manuale.addRow("Cognome:", self.txt_cognome)
 
         group_manuale.setLayout(layout_manuale)
-        layout_main.addWidget(group_manuale)
+        content_layout.addWidget(group_manuale) # AGGIUNTO A content_layout
 
         # 🗓️ Dati Noleggio (Group Box)
         group_noleggio = QGroupBox("Dati Noleggio")
-        layout_noleggio = QFormLayout()
+        # Cambio da QFormLayout a QGridLayout per disposizione 2x2
+        layout_noleggio_grid = QGridLayout()
 
+        # Prima riga
+        layout_noleggio_grid.addWidget(QLabel("Data Noleggio:"), 0, 0, Qt.AlignRight)
         self.date_edit = QDateEdit(QDate.currentDate())
         self.date_edit.setCalendarPopup(True)
-        layout_noleggio.addRow("Data Noleggio:", self.date_edit)
+        layout_noleggio_grid.addWidget(self.date_edit, 0, 1)
 
+        layout_noleggio_grid.addWidget(QLabel("Ora Noleggio:"), 0, 2, Qt.AlignRight)
         self.time_edit = QTimeEdit(QTime.currentTime())
         self.time_edit.setDisplayFormat("HH:mm")
-        layout_noleggio.addRow("Ora Noleggio:", self.time_edit)
+        layout_noleggio_grid.addWidget(self.time_edit, 0, 3)
 
+        # Seconda riga
+        layout_noleggio_grid.addWidget(QLabel("Durata Noleggio:"), 1, 0, Qt.AlignRight)
         self.spin_durata = QSpinBox()
         self.spin_durata.setMinimum(1)
         self.spin_durata.setMaximum(24)
         self.spin_durata.setSuffix(" ore")
         self.spin_durata.valueChanged.connect(self.calcola_importo_totale)
-        layout_noleggio.addRow("Durata Noleggio:", self.spin_durata)
+        layout_noleggio_grid.addWidget(self.spin_durata, 1, 1)
 
+        layout_noleggio_grid.addWidget(QLabel("Lingua Ricevuta:"), 1, 2, Qt.AlignRight)
         self.cmb_lingua = QComboBox()
-        self.cmb_lingua.addItem("Italiano")
-        self.cmb_lingua.addItem("English")
-        layout_noleggio.addRow("Lingua Ricevuta:", self.cmb_lingua)
+        self.cmb_lingua.addItems(["Italiano", "English", "Deutsch", "Français", "Español", "Nederlands"])
+        layout_noleggio_grid.addWidget(self.cmb_lingua, 1, 3)
 
-        group_noleggio.setLayout(layout_noleggio)
-        layout_main.addWidget(group_noleggio)
+        group_noleggio.setLayout(layout_noleggio_grid)
+        content_layout.addWidget(group_noleggio) # AGGIUNTO A content_layout
 
         # 🛶 Materiali Noleggiati (Group Box)
         group_materiali = QGroupBox("Materiali Noleggiati")
         layout_materiali = QVBoxLayout()
         
-        # Layout per input barcode e pulsanti aggiungi/rimuovi
         layout_input_materiale = QHBoxLayout()
         self.txt_barcode = QLineEdit()
         self.txt_barcode.setPlaceholderText("Inserisci o scansiona codice a barre")
-        # 🚨 MODIFICA: Limita la larghezza del QLineEdit del barcode
-        self.txt_barcode.setFixedWidth(200) # Puoi aggiustare questo valore
-        self.txt_barcode.returnPressed.connect(self.aggiungi_materiale_da_barcode) # Ho rinominato la tua funzione
+        self.txt_barcode.setFixedWidth(200)
+        self.txt_barcode.returnPressed.connect(self.aggiungi_materiale_da_barcode)
         layout_input_materiale.addWidget(self.txt_barcode)
 
-        btn_seleziona_materiale = QPushButton("➕ Manuale") # 🚨 MODIFICA: Testo del pulsante visibile
+        btn_seleziona_materiale = QPushButton("➕ Manuale")
         btn_seleziona_materiale.clicked.connect(self.apri_selettore_materiale)
         layout_input_materiale.addWidget(btn_seleziona_materiale)
 
         btn_rimuovi_materiale = QPushButton("➖ Rimuovi Selezionato")
-        btn_rimuovi_materiale.clicked.connect(self.rimuovi_materiale_selezionato) # Ho rinominato la tua funzione
+        btn_rimuovi_materiale.clicked.connect(self.rimuovi_materiale_selezionato)
         layout_input_materiale.addWidget(btn_rimuovi_materiale)
         
-        layout_input_materiale.addStretch(1) # Spinge i pulsanti a sinistra
+        layout_input_materiale.addStretch(1)
 
-        layout_materiali.addLayout(layout_input_materiale) # Aggiunto il layout orizzontale al layout verticale
+        layout_materiali.addLayout(layout_input_materiale)
 
-        # Tabella materiali
         self.tabella_materiali = QTableWidget()
         self.tabella_materiali.setColumnCount(5) 
         self.tabella_materiali.setHorizontalHeaderLabels(["ID", "Codice", "Nome", "Tipo", "Produttore"])
@@ -133,10 +136,10 @@ class NoleggioMateriale(QWidget):
         layout_materiali.addWidget(self.tabella_materiali)
 
         group_materiali.setLayout(layout_materiali)
-        layout_main.addWidget(group_materiali)
+        content_layout.addWidget(group_materiali) # AGGIUNTO A content_layout
 
         # 💰 Metodo di Pagamento e Totale (Group Box)
-        group_pagamento = QGroupBox("Pagamento e Totale") # Ho combinato pagamento e totale in un unico box
+        group_pagamento = QGroupBox("Pagamento e Totale")
         layout_pagamento = QVBoxLayout()
 
         layout_metodo_pagamento = QHBoxLayout()
@@ -150,12 +153,12 @@ class NoleggioMateriale(QWidget):
         self.btn_paga_carta.clicked.connect(lambda: self.set_metodo_pagamento("Carta"))
         layout_metodo_pagamento.addWidget(self.btn_paga_carta)
 
-        self.btn_paga_altro = QPushButton("Altro") # Ho rinominato btn_altro a btn_paga_altro per chiarezza
+        self.btn_paga_altro = QPushButton("Altro")
         self.btn_paga_altro.setCheckable(True)
         self.btn_paga_altro.clicked.connect(lambda: self.set_metodo_pagamento("Altro"))
         layout_metodo_pagamento.addWidget(self.btn_paga_altro)
         
-        layout_metodo_pagamento.addStretch(1) # Spinge i pulsanti a sinistra
+        layout_metodo_pagamento.addStretch(1)
 
         layout_pagamento.addLayout(layout_metodo_pagamento)
 
@@ -164,10 +167,9 @@ class NoleggioMateriale(QWidget):
         layout_pagamento.addWidget(self.lbl_importo_totale)
 
         group_pagamento.setLayout(layout_pagamento)
-        layout_main.addWidget(group_pagamento)
+        content_layout.addWidget(group_pagamento) # AGGIUNTO A content_layout
 
         # 🖨️ Pulsanti di Azione (Stampa Privacy, Stampa Ricevuta, Avvia Noleggio, Nuovo Noleggio)
-        # 🚨 MODIFICA: Creazione del GroupBox per i pulsanti di azione
         group_actions = QGroupBox("Azioni Noleggio") 
         layout_actions = QHBoxLayout()
 
@@ -180,21 +182,34 @@ class NoleggioMateriale(QWidget):
         layout_actions.addWidget(self.btn_stampa_ricevuta)
         
         self.btn_avvia = QPushButton("▶️ Avvia Noleggio")
-        self.btn_avvia.setEnabled(False) # Inizialmente disabilitato
-        self.btn_avvia.clicked.connect(self.lancio_avvio_noleggio) # Ho rinominato la tua funzione
+        self.btn_avvia.setEnabled(False)
+        self.btn_avvia.clicked.connect(self.lancio_avvio_noleggio)
         layout_actions.addWidget(self.btn_avvia)
         
         self.btn_nuovo_noleggio = QPushButton("🔄 Nuovo Noleggio")
         self.btn_nuovo_noleggio.clicked.connect(self.reset_form)
         layout_actions.addWidget(self.btn_nuovo_noleggio)
 
-        layout_actions.addStretch(1) # Spinge i pulsanti a sinistra
-        group_actions.setLayout(layout_actions) # Imposta il layout per il GroupBox
-        layout_main.addWidget(group_actions) # Aggiungi il GroupBox al layout principale
+        layout_actions.addStretch(1)
+        group_actions.setLayout(layout_actions)
+        content_layout.addWidget(group_actions) # AGGIUNTO A content_layout
 
-        self.setLayout(layout_main)
-        self.verifica_condizioni_avvio() # Inizializza lo stato dei pulsanti
+        # 2. Crea un QWidget che funga da contenitore per content_layout.
+        container_widget = QWidget()
+        container_widget.setLayout(content_layout)
 
+        # 3. Crea la QScrollArea e imposta il container_widget come suo widget.
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setWidget(container_widget)
+
+        # 4. Imposta il layout principale della finestra (self) per contenere solo la QScrollArea.
+        main_window_layout = QVBoxLayout(self) # <-- Questa è la variabile corretta
+        main_window_layout.addWidget(scroll_area)
+        self.setLayout(main_window_layout)
+
+        self.verifica_condizioni_avvio()
+    # ... il resto del tuo codice rimane invariato ...
 
     def acquisisci_documento_da_webcam(self):
         cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # CAP_DSHOW migliora compatibilità con Windows
@@ -254,21 +269,21 @@ class NoleggioMateriale(QWidget):
 
         cap.release()
         cv2.destroyAllWindows()
-        self.verifica_condizioni_avvio() # Verifica dopo aver potenzialmente riempito i campi OCR
+        self.verifica_condizioni_avvio()
 
 
-    def apri_selettore_materiale(self): # Rinominato da inserisci_materiale_manualmente per chiarezza
+    def apri_selettore_materiale(self):
         dialog = SelezionaMaterialeDisponibile(self)
         if dialog.exec() == QDialog.Accepted:
-            materiale_selezionato_dict = dialog.materiale_scelto # Ora ricevi un dizionario completo
+            materiale_selezionato_dict = dialog.materiale_scelto
             if materiale_selezionato_dict:
                 self.aggiungi_materiale_tabella(
-                    id_db=materiale_selezionato_dict['id'], # Passa l'ID del DB
+                    id_db=materiale_selezionato_dict['id'],
                     codice=materiale_selezionato_dict['codice'],
                     nome=materiale_selezionato_dict['nome'],
                     tipo=materiale_selezionato_dict['tipo'], 
                     produttore=materiale_selezionato_dict['produttore'],
-                    descrizione=materiale_selezionato_dict.get('descrizione', '') # Usa .get per sicurezza
+                    descrizione=materiale_selezionato_dict.get('descrizione', '')
                 )
                 self.calcola_importo_totale() 
                 self.verifica_condizioni_avvio() 
@@ -276,7 +291,7 @@ class NoleggioMateriale(QWidget):
                 QMessageBox.warning(self, "Materiale", "Nessun materiale selezionato o dettagli non trovati.")
 
 
-    def aggiungi_materiale_da_barcode(self): # Rinominato da leggi_codice_barre per chiarezza
+    def aggiungi_materiale_da_barcode(self):
         codice = self.txt_barcode.text().strip()
         if not codice:
             return
@@ -284,7 +299,7 @@ class NoleggioMateriale(QWidget):
         materiale = get_materiale_by_barcode(codice)
         if materiale:
             self.aggiungi_materiale_tabella(
-                id_db=materiale['id'], # Passa l'ID del DB
+                id_db=materiale['id'],
                 codice=materiale['codice'],
                 nome=materiale['nome'],
                 tipo=materiale['tipo'],
@@ -300,25 +315,24 @@ class NoleggioMateriale(QWidget):
 
 
     def aggiungi_materiale_tabella(self, id_db, codice, nome, tipo, produttore, descrizione):
-        for mat_id, _, _, _, _, _ in self.materiali_noleggiati: # Controlla solo l'ID
+        for mat_id, _, _, _, _, _ in self.materiali_noleggiati:
             if mat_id == id_db: 
                 QMessageBox.warning(self, "Duplicato", "Materiale già aggiunto al noleggio.")
                 return
 
         riga = self.tabella_materiali.rowCount()
         self.tabella_materiali.insertRow(riga)
-        self.tabella_materiali.setItem(riga, 0, QTableWidgetItem(str(id_db))) # Colonna nascosta per l'ID
+        self.tabella_materiali.setItem(riga, 0, QTableWidgetItem(str(id_db)))
         self.tabella_materiali.setItem(riga, 1, QTableWidgetItem(codice))
         self.tabella_materiali.setItem(riga, 2, QTableWidgetItem(nome))
         self.tabella_materiali.setItem(riga, 3, QTableWidgetItem(tipo)) 
         self.tabella_materiali.setItem(riga, 4, QTableWidgetItem(produttore))
 
-        # Assicurati che self.materiali_noleggiati memorizzi la tupla completa
         self.materiali_noleggiati.append((id_db, codice, nome, tipo, produttore, descrizione)) 
         self.tabella_materiali.resizeColumnsToContents()
-        self.tabella_materiali.setColumnWidth(4, 150) # Imposta una larghezza per produttore
+        self.tabella_materiali.setColumnWidth(4, 150)
 
-    def rimuovi_materiale_selezionato(self): # Rinominato da rimuovi_riga_materiale
+    def rimuovi_materiale_selezionato(self):
         riga_selezionata = self.tabella_materiali.currentRow()
         if riga_selezionata >= 0:
             conferma = QMessageBox.question(self, "Rimuovi Materiale", "Sei sicuro di voler rimuovere il materiale selezionato?",
@@ -342,7 +356,7 @@ class NoleggioMateriale(QWidget):
         durata = self.spin_durata.value()
         
         for mat in self.materiali_noleggiati:
-            tipo_materiale = mat[3] # Il tipo è l'elemento in posizione 3 della tupla
+            tipo_materiale = mat[3]
             prezzo_orario = get_prezzo_orario_by_tipo(tipo_materiale)
             if prezzo_orario is not None:
                 self.importo_totale_noleggio += prezzo_orario * durata
@@ -355,26 +369,21 @@ class NoleggioMateriale(QWidget):
 
     def set_metodo_pagamento(self, metodo):
         self.pagamento_scelto = metodo
-        # Gestisci lo stato dei pulsanti checkable
         self.btn_paga_contanti.setChecked(metodo == "Contanti")
         self.btn_paga_carta.setChecked(metodo == "Carta")
-        self.btn_paga_altro.setChecked(metodo == "Altro") # Aggiunto il pulsante "Altro"
+        self.btn_paga_altro.setChecked(metodo == "Altro")
 
         self.verifica_condizioni_avvio()
 
 
     def verifica_condizioni_avvio(self):
-        # Nome e Cognome (da campi manuali o OCR)
         nome_ok = bool(self.txt_nome.text().strip()) or bool(self.txt_nome_ocr.text().strip())
         cognome_ok = bool(self.txt_cognome.text().strip()) or bool(self.txt_cognome_ocr.text().strip())
         
-        # Materiali selezionati
         materiali_selezionati = bool(self.materiali_noleggiati)
         
-        # Metodo di pagamento selezionato
         metodo_pagamento_selezionato = self.pagamento_scelto is not None
 
-        # Condizioni preliminari per tutte le azioni
         condizioni_minime_ok = (
             nome_ok and
             cognome_ok and
@@ -382,16 +391,10 @@ class NoleggioMateriale(QWidget):
             metodo_pagamento_selezionato
         )
         
-        # Abilita/Disabilita pulsante "Stampa Privacy"
-        # La privacy può essere stampata se ci sono nome e cognome
         self.btn_stampa_privacy.setEnabled(nome_ok and cognome_ok)
 
-        # Abilita/Disabilita pulsante "Stampa Ricevuta"
-        # La ricevuta richiede condizioni minime OK E privacy stampata
         self.btn_stampa_ricevuta.setEnabled(condizioni_minime_ok and self.privacy_stampata)
 
-        # Abilita/Disabilita pulsante "Avvia Noleggio"
-        # Avvia Noleggio richiede tutte le condizioni minime OK E privacy stampata E ricevuta stampata
         if (condizioni_minime_ok and self.privacy_stampata and self.ricevuta_stampata):
             self.btn_avvia.setEnabled(True)
         else:
@@ -410,13 +413,13 @@ class NoleggioMateriale(QWidget):
             QMessageBox.information(self, "Privacy", "La privacy è già stata stampata per questo noleggio.")
             return
         
-        lingua = self.cmb_lingua.currentText().strip().lower() # Assicurati che sia in minuscolo per la funzione Utils
+        lingua = self.cmb_lingua.currentText().strip().lower()
         
         path_privacy = stampa_privacy(lingua) 
         
         if path_privacy:
             self.privacy_stampata = True
-            self.percorso_doc_privacy = path_privacy #
+            self.percorso_doc_privacy = path_privacy
             QMessageBox.information(self, "Stampa Privacy", f"Documento privacy creato e aperto in:\n{path_privacy}")
             self.verifica_condizioni_avvio() 
         else:
@@ -431,83 +434,63 @@ class NoleggioMateriale(QWidget):
 
         nome = self.txt_nome.text().strip() or self.txt_nome_ocr.text().strip()
         cognome = self.txt_cognome.text().strip() or self.txt_cognome_ocr.text().strip()
-        data_noleggio_per_pdf = self.date_edit.date().toString("dd/MM/yyyy") # Formato per PDF
-        data_noleggio_db_format = self.date_edit.date().toString("yyyy-MM-dd") # Formato per il DB
+        data_noleggio_per_pdf = self.date_edit.date().toString("dd/MM/yyyy")
+        data_noleggio_db_format = self.date_edit.date().toString("yyyy-MM-dd")
         ora_noleggio = self.time_edit.time().toString("HH:mm")
         durata_ore = self.spin_durata.value()
         metodo_pagamento = self.pagamento_scelto
         lingua = self.cmb_lingua.currentText().strip().lower()
 
-        # Controlli di validazione (li mantengo come i tuoi attuali)
         if not (bool(nome) and bool(cognome) and self.materiali_noleggiati and metodo_pagamento and self.privacy_stampata):
             QMessageBox.warning(self, "Dati Mancanti", "Completa tutti i campi (Nome, Cognome, Materiali, Pagamento) e stampa la Privacy prima di stampare la ricevuta.")
             return
 
-        
-
-        # Ottieni il prossimo numero di ricevuta (es. "0001/2024")
         numero_ricevuta_per_stampa = get_prossimo_numero_ricevuta() 
         if not numero_ricevuta_per_stampa:
             QMessageBox.critical(self, "Errore Ricevuta", "Impossibile generare il numero di ricevuta.")
             return
 
-        # Ora chiama gestisci_stampa_ricevuta con tutti i parametri, incluso il nuovo id_noleggio_corrente
-        # Ho rimosso l'istanza del widget dal primo parametro perché gestisci_stampa_ricevuta
-        # nel tuo file (gestione_stampe_ricevute.py) sembra aspettarsi 12 parametri.
-        # Se ricevi un errore, potremmo dover rivedere la definizione di gestisci_stampa_ricevuta.
         ricevuta_successo = gestisci_stampa_ricevuta(
-            # Questi sono i 12 parametri che gestisci_stampa_ricevuta si aspetta
-            # (nome_cliente, cognome_cliente, materiali_noleggiati_list, data_noleggio, ora_noleggio,
-            # durata_ore, metodo_pagamento, importo_totale, lingua, id_noleggio_corrente, numero_ricevuta_completo)
             nome_cliente=nome,
             cognome_cliente=cognome,
             materiali_noleggiati_list=self.materiali_noleggiati, 
-            data_noleggio=data_noleggio_per_pdf, # Formato DD/MM/YYYY per il PDF
+            data_noleggio=data_noleggio_per_pdf,
             ora_noleggio=ora_noleggio,
             durata_ore=durata_ore,
             metodo_pagamento=metodo_pagamento,
             importo_totale=self.importo_totale_noleggio,
             lingua=lingua,
-            id_noleggio_corrente=self.id_noleggio_corrente,       # <<< PASSA L'ID APPENA CREATO/RECUPERATO
-            numero_ricevuta_completo=numero_ricevuta_per_stampa   # <<< PASSA IL NUMERO DI RICEVUTA
+            id_noleggio_corrente=self.id_noleggio_corrente,
+            numero_ricevuta_completo=numero_ricevuta_per_stampa
             )
          
         print(f"--- DEBUG (stampa_manager): ha restituito  {ricevuta_successo} ---")
         if ricevuta_successo:
             self.ricevuta_stampata = True
             QMessageBox.information(self, "Stampa Ricevuta", "Ricevuta generata e salvata con successo!")
-            self.verifica_condizioni_avvio() # Questa funzione ora può abilitare "Avvia Noleggio"
+            self.verifica_condizioni_avvio()
         else:
             QMessageBox.warning(self, "Stampa Ricevuta", "Errore durante la stampa sono nella Noleggio Materiale")
             
 
-    # In noleggio_materiale.py, dentro la classe NoleggioMateriale
-
     def lancio_avvio_noleggio(self):
-        # 1. Recupera SEMPRE i dati del form all'inizio.
         nome = self.txt_nome.text().strip() or self.txt_nome_ocr.text().strip()
         cognome = self.txt_cognome.text().strip() or self.txt_cognome_ocr.text().strip()
-        data_noleggio_db_format = self.date_edit.date().toString("yyyy-MM-dd") # Formato per il DB
+        data_noleggio_db_format = self.date_edit.date().toString("yyyy-MM-dd")
         ora_noleggio = self.time_edit.time().toString("HH:mm")
         durata_ore = self.spin_durata.value()
         lingua = self.cmb_lingua.currentText().strip().lower()
         metodo_pagamento = self.pagamento_scelto
-        # importo_totale_noleggio dovrebbe essere self.importo_totale_noleggio, già aggiornato
-        # e non necessita di essere riassegnato da un altro campo qui.
 
-        # 2. Controllo iniziale delle condizioni prima di procedere con la finalizzazione/creazione.
-        # L'ID Noleggio Corrente deve esistere se è stato creato prima, o verrà creato ora.
         if not self.ricevuta_stampata or not self.privacy_stampata:
             QMessageBox.critical(self, "Errore", "Assicurati che la privacy sia stampata e la ricevuta generata prima di finalizzare il noleggio.")
             return
 
-        # 3. Se id_noleggio_corrente NON esiste ancora, crea un nuovo noleggio e inserisci i dettagli.
         if self.id_noleggio_corrente is None:
             if not hasattr(self, 'percorso_doc_privacy') or not self.percorso_doc_privacy:
                 QMessageBox.critical(self, "Errore", "Percorso del documento privacy non disponibile. Stampa prima la privacy.")
                 return
 
-            # Chiamiamo la funzione di data_access per inserire il noleggio principale
             self.id_noleggio_corrente = inserisci_noleggio(
                                                             nome_cliente=nome,
                                                             cognome_cliente=cognome,
@@ -517,7 +500,7 @@ class NoleggioMateriale(QWidget):
                                                             percorso_documento_privacy=self.percorso_doc_privacy,
                                                             lingua=lingua,
                                                             metodo_pagamento=metodo_pagamento,
-                                                            importo_totale=self.importo_totale_noleggio, # Usa il valore già calcolato
+                                                            importo_totale=self.importo_totale_noleggio,
                                                             data_inizio=data_noleggio_db_format,
                                                             ora_inizio=ora_noleggio
                                                         )
@@ -526,7 +509,6 @@ class NoleggioMateriale(QWidget):
                 QMessageBox.critical(self, "Errore Noleggio", "Impossibile registrare il noleggio nel database.")
                 return
 
-            # Inserisci i dettagli del noleggio e aggiorna la disponibilità dei materiali
             for id_db, codice, _, _, _, _ in self.materiali_noleggiati:
                 materiale = get_materiale_by_barcode(codice)
                 if materiale:
@@ -536,14 +518,8 @@ class NoleggioMateriale(QWidget):
                 else:
                     QMessageBox.warning(self, "Materiale mancante", f"Materiale con codice {codice} non trovato. Noleggio parziale.")
             
-            # Una volta creato il noleggio, il pulsante "Avvia Noleggio" potrebbe essere cliccato di nuovo,
-            # ma il noleggio non deve essere ricreato.
-            # Qui potresti voler disabilitare il pulsante o cambiare il suo testo.
-            # Oppure, la logica di verifica_condizioni_avvio() dovrebbe impedirlo.
-
         print(f"DEBUG: ID Noleggio corrente (dopo potenziale creazione): {self.id_noleggio_corrente}")
         
-        # 4. Chiama la funzione per finalizzare il noleggio (questa parte è già corretta)
         successo_finalizzazione = finalizza_noleggio(self.id_noleggio_corrente) 
 
         if successo_finalizzazione:
@@ -573,7 +549,7 @@ class NoleggioMateriale(QWidget):
         self.pagamento_scelto = None
         self.btn_paga_contanti.setChecked(False)
         self.btn_paga_carta.setChecked(False)
-        self.btn_paga_altro.setChecked(False) # Resetta anche il pulsante "Altro"
+        self.btn_paga_altro.setChecked(False)
         self.id_noleggio_corrente = None
         
         self.importo_totale_noleggio = 0.0

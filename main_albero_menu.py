@@ -12,7 +12,7 @@ import sys
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QVBoxLayout, QHBoxLayout,
     QStackedWidget, QDialog, QLineEdit, QFormLayout, QDialogButtonBox,
-    QTreeWidget, QTreeWidgetItem 
+    QTreeWidget, QTreeWidgetItem, QSpacerItem, QSizePolicy 
 )
 from PySide6.QtGui import QPixmap, QFontDatabase, QFont
 from PySide6.QtCore import Qt
@@ -77,7 +77,7 @@ class MainWindow(QMainWindow):
         # QTreeWidget come menu ad albero
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
-        self.tree.setFont(self.icon_font) # Applica il font delle icone al tree
+       # self.tree.setFont(self.icon_font) # Applica il font delle icone al tree
         layout.addWidget(self.tree, 2)
 
         self.tree.itemClicked.connect(self.on_item_clicked)
@@ -132,7 +132,7 @@ class MainWindow(QMainWindow):
         # Area contenuto
         self.stack = QStackedWidget()
         layout.addWidget(self.stack, 5)
-
+        layout.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
         # Pagine (aggiunte alla cache per la prima volta e poi riutilizzate)
         logo_label = QLabel()
         img_path = Path(__file__).resolve().parent / "logo_windsurf_resized.jpg"
@@ -219,7 +219,7 @@ if __name__ == "__main__":
             ruolo = "operatore" 
         
         window = MainWindow(ruolo)
-        window.showMaximized() # Apre la finestra massimizzata per un look più professionale
+        window.resize(1280, 800) # <-- AGGIUNGI QUESTA RIGA
+        #window.showMaximized() # Apre la finestra massimizzata per un look più professionale
+        window.show()
         sys.exit(app.exec())
-    else:
-        sys.exit(0) # Esci se il login viene annullato
