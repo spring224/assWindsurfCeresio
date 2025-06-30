@@ -6,6 +6,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QTimer, QDateTime # Importa QDateTime per calcoli data/ora
 from data_access import get_noleggi_attivi, chiudi_noleggio, aggiorna_disponibilita_materiale_by_id # Assicurati di avere queste funzioni in data_access.py
+from datetime import datetime, timedelta # Aggiungi timedelta qui
 
 class SituazioneNoleggi(QWidget):
     def __init__(self):
@@ -38,6 +39,7 @@ class SituazioneNoleggi(QWidget):
         # Tabella per visualizzare i noleggi
         self.table_noleggi = QTableWidget()
         # Definisci le colonne: ID Noleggio, Cliente, Materiali, Inizio, Fine Prevista, Tempo Residuo, Azioni
+        
         self.table_noleggi.setColumnCount(7) 
         self.table_noleggi.setHorizontalHeaderLabels([
             "ID Noleggio", "Cliente", "Materiali", "Inizio Noleggio", 
@@ -57,6 +59,9 @@ class SituazioneNoleggi(QWidget):
     def load_noleggi(self):
         self.table_noleggi.setRowCount(0) # Pulisci la tabella
         noleggi_attivi = get_noleggi_attivi() # Questa funzione deve recuperare tutti i noleggi attivi
+        # AGGIUNGI QUESTA RIGA PER VEDERE I DATI COMPLETI
+        for n in noleggi_attivi:
+            print(f"DEBUG (data_access): Noleggio recuperato: {n}")
 
         for row_idx, noleggio in enumerate(noleggi_attivi):
             self.table_noleggi.insertRow(row_idx)
@@ -67,14 +72,22 @@ class SituazioneNoleggi(QWidget):
             nome_cliente = noleggio.get("nome_cliente", "N/A")
             cognome_cliente = noleggio.get("cognome_cliente", "")
             materiali_str = ", ".join([mat.get('nome', 'N/A') for mat in noleggio.get('materiali', [])]) # Assumi lista di dict per materiali
-            data_inizio_str = noleggio.get("data_inizio", "N/A")
+            data_inizio_str = noleggio.get("data_noleggio", "N/A")
             ora_inizio_str = noleggio.get("ora_inizio", "N/A")
             durata_ore = noleggio.get("durata_ore", 0)
+
+            print(f"DEBUG Noleggio ID: {id_noleggio}")
+            print(f"DEBUG data_inizio_str: '{data_inizio_str}' (Tipo: {type(data_inizio_str)})")
+            print(f"DEBUG ora_inizio_str: '{ora_inizio_str}' (Tipo: {type(ora_inizio_str)})")
+            print(f"DEBUG durata_ore: {durata_ore} (Tipo: {type(durata_ore)})")
+
+            dt_inizio_str_combined = f"{data_inizio_str} {ora_inizio_str}"
+            print(f"DEBUG dt_inizio_str_combined: '{dt_inizio_str_combined}'")
 
             # Combina data e ora per calcoli
             try:
                 dt_inizio_str = f"{data_inizio_str} {ora_inizio_str}"
-                dt_inizio = QDateTime.fromString(dt_inizio_str, "yyyy-MM-dd HH:mm")
+                dt_inizio = QDateTime.fromString(dt_inizio_str_combined, "yyyy-MM-dd HH:mm")
                 dt_fine_prevista = dt_inizio.addSecs(durata_ore * 3600) # Aggiungi ore convertite in secondi
                 fine_prevista_str = dt_fine_prevista.toString("dd/MM/yyyy HH:mm")
             except Exception as e:
@@ -92,6 +105,8 @@ class SituazioneNoleggi(QWidget):
             self.table_noleggi.setItem(row_idx, 4, QTableWidgetItem(fine_prevista_str))
             
             tempo_residuo_item = QTableWidgetItem(tempo_residuo_str)
+            print(f"DEBUG fine_prevista_str: '{fine_prevista_str}'")
+            print(f"DEBUG tempo_residuo_str: '{tempo_residuo_str}'")
             self.table_noleggi.setItem(row_idx, 5, tempo_residuo_item)
             # Puoi cambiare il colore del testo per il tempo residuo se scaduto/vicino alla scadenza
             if "SCADUTO" in tempo_residuo_str:

@@ -7,3 +7,4 @@ codicefiscale
 reportlab
 pillow
 pytesseract
+openpyxl

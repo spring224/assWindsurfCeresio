@@ -112,7 +112,7 @@ def genera_ricevuta_pdf_multilingua(
     output_directory.mkdir(parents=True, exist_ok=True) # Crea la directory se non esiste
 
     # Impostazioni generali del PDF
-    pdf = FPDF('P', 'mm', 'A4')
+    pdf = FPDF('P', 'mm', 'A5')
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
     pdf.set_font('helvetica', '', 10)

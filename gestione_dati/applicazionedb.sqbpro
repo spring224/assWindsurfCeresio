@@ -1,1 +1,30 @@
-<?xml version="1.0" encoding="UTF-8"?><sqlb_project><db path="applicazionedb.db" readonly="0" foreign_keys="1" case_sensitive_like="0" temp_store="0" wal_autocheckpoint="1000" synchronous="2"/><attached/><window><main_tabs open="structure browser pragmas query" current="3"/></window><tab_structure><column_width id="0" width="300"/><column_width id="1" width="0"/><column_width id="2" width="100"/><column_width id="3" width="3195"/><column_width id="4" width="0"/><expanded_item id="0" parent="1"/><expanded_item id="1" parent="1"/><expanded_item id="2" parent="1"/><expanded_item id="3" parent="1"/></tab_structure><tab_browse><table title="materiali" custom_title="0" dock_id="1" table="4,9:mainmateriali"/><dock_state state="000000ff00000000fd0000000100000002000005180000029dfc0100000001fb000000160064006f0063006b00420072006f00770073006500310100000000000005180000010100ffffff0000029b0000000000000004000000040000000800000008fc00000000"/><default_encoding codec=""/><browse_table_settings><table schema="main" name="Contatori" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="42"/><column index="2" value="158"/><column index="3" value="160"/><column index="4" value="148"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table><table schema="main" name="materiali" show_row_id="0" encoding="" plot_x_axis="" unlock_view_pk="_rowid_" freeze_columns="0"><sort/><column_widths><column index="1" value="21"/><column index="2" value="51"/><column index="3" value="64"/><column index="4" value="125"/><column index="5" value="78"/><column index="6" value="87"/><column index="7" value="111"/><column index="8" value="155"/><column index="9" value="205"/><column index="10" value="149"/><column index="11" value="79"/><column index="12" value="133"/><column index="13" value="26"/><column index="14" value="40"/></column_widths><filter_values/><conditional_formats/><row_id_formats/><display_formats/><hidden_columns/><plot_y_axes/><global_filter/></table></browse_table_settings></tab_browse><tab_sql><sql name="SQL 1*">PRAGMA table_info (materiali)</sql><current_tab id="0"/></tab_sql></sqlb_project>
+<?xml version="1.0" encoding="UTF-8"?><sqlb_project><db path="applicazionedb.db" readonly="0" foreign_keys="1" case_sensitive_like="0" temp_store="0" wal_autocheckpoint="1000" synchronous="2"/><attached/><window><main_tabs open="structure browser pragmas query" current="3"/></window><tab_structure><column_width id="0" width="300"/><column_width id="1" width="0"/><column_width id="2" width="100"/><column_width id="3" width="3195"/><column_width id="4" width="0"/><expanded_item id="0" parent="1"/><expanded_item id="1" parent="1"/><expanded_item id="2" parent="1"/><expanded_item id="3" parent="1"/></tab_structure><tab_browse><table title="Contatori" custom_title="0" dock_id="1" table="4,9:mainContatori"/><dock_state state="000000ff00000000fd00000001000000020000000000000000fc0100000001fb000000160064006f0063006b00420072006f00770073006500310100000000ffffffff0000010100ffffff000000000000000000000004000000040000000800000008fc00000000"/><default_encoding codec=""/><browse_table_settings/></tab_browse><tab_sql><sql name="SQL 1*">CREATE TABLE IF NOT EXISTS Clienti (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nome TEXT NOT NULL,
+    cognome TEXT NOT NULL,
+    email TEXT UNIQUE,
+    telefono TEXT,
+    indirizzo TEXT,
+    data_nascita TEXT, -- Formato 'YYYY-MM-DD'
+    codice_fiscale TEXT UNIQUE
+-- );</sql><sql name="SQL 2*">CREATE TABLE IF NOT EXISTS Tessere (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id_cliente INTEGER NOT NULL,
+    prezzo_totale REAL NOT NULL,
+    numero_item_totale INTEGER NOT NULL,
+    item_usati INTEGER NOT NULL DEFAULT 0,
+    data_creazione TEXT NOT NULL, -- Formato 'YYYY-MM-DD'
+    data_scadenza TEXT, -- Formato 'YYYY-MM-DD', opzionale
+    attiva INTEGER NOT NULL DEFAULT 1, -- 1 per attiva, 0 per disabilitata/scaduta
+    FOREIGN KEY (id_cliente) REFERENCES Clienti(id)
+);</sql><sql name="SQL 3*">ALTER TABLE Tessere ADD COLUMN tipo_tessera TEXT;</sql><sql name="SQL 4*">CREATE TABLE IF NOT EXISTS LezioniProgrammate (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id_tessera INTEGER NOT NULL, -- Riferimento alla tessera a cui è associata la lezione
+    data_lezione TEXT NOT NULL,  -- Formato 'YYYY-MM-DD'
+    ora_lezione TEXT,            -- Formato 'HH:MM', opzionale
+    descrizione TEXT,            -- Es. &quot;Lezione Windsurf Principianti&quot;, &quot;Lezione Privata&quot;
+    note TEXT,                   -- Campo per note aggiuntive
+    confermata INTEGER DEFAULT 0, -- 0 = non confermata, 1 = confermata
+    completata INTEGER DEFAULT 0, -- 0 = non completata, 1 = completata
+    FOREIGN KEY (id_tessera) REFERENCES Tessere(id) ON DELETE CASCADE
+);</sql><sql name="SQL 5*">REATE INDEX IF NOT EXISTS idx_lezioni_data ON LezioniProgrammate (data_lezione);</sql><current_tab id="4"/></tab_sql></sqlb_project>

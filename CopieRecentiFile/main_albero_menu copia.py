@@ -1,38 +1,25 @@
+# main_albero_menu.py
 
-
-# ... (I tuoi import esistenti) ...
-from gestione_inventario import DialogoAnagraficaMateriali # <--- AGGIUNGI/MODIFICA QUESTA RIGA
-from stampa_codici_barre import FinestraStampaCodici
+from gestione_soci_annuali_pyside import FinestraGestioneSoci
+from gestione_inventario import AnagraficaMateriali
+from stampa_codici_barre import FinestraStampaCodici 
 from noleggio_materiale import NoleggioMateriale
 from situazione_noleggi import SituazioneNoleggi
-from data_access import get_connection
-from gestione_noleggi import GestioneNoleggi
-from gestione_soci_annuali_pyside import FinestraGestioneSoci
-from dialogo_comunicazioni import DialogoComunicazioni
-
-
-# !!! AGGIUNGI QUESTI NUOVI IMPORT PER LE CLASSI DELLE TESSERE NOLEGGIO !!!
-# Le classi FinestraCreaTessera e FinestraGestisciTessera
-# dovranno essere definite in file Python separati (es. crea_tessere.py e gestisci_tessere.py
-# Ho decommentato FinestraCreaTessera.
-from crea_tessere import FinestraCreaTessera
-from gestisci_tessere import FinestraGestisciTessera # <<< QUESTA CLASSE LA CREEREMO TRA POCO
-# !!! FINE NUOVI IMPORT !!!
+from data_access import get_connection # Mantenuto, anche se non usato direttamente qui.
+from gestione_noleggi import GestioneNoleggi # Importa anche GestioneNoleggi
 
 import sys
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QLabel, QVBoxLayout, QHBoxLayout,
     QStackedWidget, QDialog, QLineEdit, QFormLayout, QDialogButtonBox,
-    QTreeWidget, QTreeWidgetItem, QSpacerItem, QSizePolicy
+    QTreeWidget, QTreeWidgetItem, QSpacerItem, QSizePolicy 
 )
 from PySide6.QtGui import QPixmap, QFontDatabase, QFont
 from PySide6.QtCore import Qt
 import os
 from pathlib import Path
 
-
 class LoginDialog(QDialog):
-    # ... (Il tuo codice esistente per LoginDialog) ...
     def __init__(self):
         super().__init__()
         
@@ -53,7 +40,6 @@ class LoginDialog(QDialog):
 
     def get_credentials(self):
         return self.username.text(), self.password.text()
-
 
 class MainWindow(QMainWindow):
     def __init__(self, ruolo):
@@ -79,8 +65,9 @@ class MainWindow(QMainWindow):
             print(f"AVVISO: File 'fa-solid-900.ttf' non trovato in {font_awesome_path}. Le icone potrebbero non essere visualizzate correttamente.")
         
         # Imposta un font per le icone (Font Awesome) per il QTreeWidget
-        self.icon_font = QFont("Font Awesome 6 Free", 14)
-        self.icon_font.setStyleHint(QFont.Cursive)
+        # Nota: La dimensione del font potrebbe aver bisogno di aggiustamenti a seconda del tuo sistema.
+        self.icon_font = QFont("Font Awesome 6 Free", 14) # Usare il nome esatto del font installato
+        self.icon_font.setStyleHint(QFont.Cursive) # Hint per trovare il font (anche se non è corsivo)
 
 
         main_widget = QWidget()
@@ -90,6 +77,7 @@ class MainWindow(QMainWindow):
         # QTreeWidget come menu ad albero
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
+       # self.tree.setFont(self.icon_font) # Applica il font delle icone al tree
         layout.addWidget(self.tree, 2)
 
         self.tree.itemClicked.connect(self.on_item_clicked)
@@ -97,11 +85,13 @@ class MainWindow(QMainWindow):
         # --- Aggiunta degli elementi del menu condizionali al ruolo ---
 
         # Nodo Home
+        # Icona: House (fas fa-home) - Unicode: \uf015
         item_home = QTreeWidgetItem(["\uf015 Home"])
-        item_home.setFont(0, self.icon_font)
+        item_home.setFont(0, self.icon_font) # Applica il font solo alla colonna 0
         self.tree.addTopLevelItem(item_home)
 
         # Nodo Gestione Tesserati (Solo Admin)
+        # Icona: Users (fas fa-users) - Unicode: \uf0c0
         item_tesserati = QTreeWidgetItem(["\uf0c0 Gestione Tesserati"])
         item_tesserati.setFont(0, self.icon_font)
         item_tesserati_annuali = QTreeWidgetItem(["Tesserati Annuali"])
@@ -111,6 +101,7 @@ class MainWindow(QMainWindow):
             self.tree.addTopLevelItem(item_tesserati)
 
         # Nodo Materiali (Solo Admin)
+        # Icona: Tools (fas fa-tools) - Unicode: \uf7d9
         item_materiali = QTreeWidgetItem(["\uf7d9 Gestione Materiali"])
         item_materiali.setFont(0, self.icon_font)
         item_materiali_anagrafica = QTreeWidgetItem(["Anagrafica Materiali"])
@@ -121,42 +112,28 @@ class MainWindow(QMainWindow):
            self.tree.addTopLevelItem(item_materiali)
 
         # Nodo Noleggi (Admin e Operatore)
+        # Icona: Sailboat (fas fa-sailboat) - Unicode: \uf445
         item_noleggi = QTreeWidgetItem(["\uf445 Programma Noleggio Materiale"])
         item_noleggi.setFont(0, self.icon_font)
         item_noleggi_noleggio_materiale = QTreeWidgetItem(["Noleggio Materiale"])
         item_noleggi_situazione_noleggi = QTreeWidgetItem(["Situazione Noleggi"])
-        item_noleggi_gestione_noleggi = QTreeWidgetItem(["Gestione Noleggi"])
+        item_noleggi_gestione_noleggi = QTreeWidgetItem(["Gestione Noleggi"]) # Solo Admin
         
         item_noleggi.addChild(item_noleggi_noleggio_materiale)
         item_noleggi.addChild(item_noleggi_situazione_noleggi)
-        if self.ruolo == "admin":
+        if self.ruolo == "admin": # Gestione Noleggi solo per admin
             item_noleggi.addChild(item_noleggi_gestione_noleggi)
         
         self.tree.addTopLevelItem(item_noleggi)
-        
-        # --- INIZIO NUOVO CODICE PER "TESSERE NOLEGGI E CORSI" ---
-        # Nodo Tessere Noleggi e Corsi (Solo Admin)
-        # Icona: Ticket (fas fa-ticket-alt) - Unicode: \uf3ff (o \uf145 per 'ticket' se preferisci)
-        item_tessere_parent = QTreeWidgetItem(["\uf3ff Tessere Noleggi e Corsi"]) # NOME ESATTO DEL PARENT
-        item_tessere_parent.setFont(0, self.icon_font)
-        
-        item_crea_tessera = QTreeWidgetItem(["Crea Tessera Noleggi o Corsi"]) # NOME ESATTO DEL FIGLIO 1
-        item_gestisci_tessera = QTreeWidgetItem(["Gestisci Tessera Noleggi o Corsi"]) # NOME ESATTO DEL FIGLIO 2
-        
-        item_tessere_parent.addChildren([item_crea_tessera, item_gestisci_tessera])
-        
-        if self.ruolo == "admin":
-            self.tree.addTopLevelItem(item_tessere_parent)
-        # --- FINE NUOVO CODICE PER "TESSERE NOLEGGI E CORSI" ---
 
 
-        self.tree.expandAll()
+        self.tree.expandAll() # Espande tutti i nodi di default
 
         # Area contenuto
         self.stack = QStackedWidget()
         layout.addWidget(self.stack, 5)
         layout.addItem(QSpacerItem(0, 0, QSizePolicy.Minimum, QSizePolicy.Expanding))
-        
+        # Pagine (aggiunte alla cache per la prima volta e poi riutilizzate)
         logo_label = QLabel()
         img_path = Path(__file__).resolve().parent / "logo_windsurf_resized.jpg"
         if img_path.exists():
@@ -167,14 +144,15 @@ class MainWindow(QMainWindow):
             print(f"AVVISO: Immagine logo non trovata in {img_path}.")
 
         logo_label.setAlignment(Qt.AlignCenter)
-        self.stack.addWidget(logo_label)
+        self.stack.addWidget(logo_label)  # Index 0: Home Page
         
+        # Inizializzazione lazy dei widget nella cache
         self.widget_cache["Home"] = logo_label
 
 
     def on_item_clicked(self, item, column):
         # Home
-        if item.text(0).endswith("Home"):
+        if item.text(0).endswith("Home"): # Controllo endswith per ignorare l'icona
             self.stack.setCurrentWidget(self.widget_cache["Home"])
         
         # Tesserati Annuali (Solo Admin)
@@ -187,7 +165,7 @@ class MainWindow(QMainWindow):
         # Anagrafica Materiali (Solo Admin)
         elif item.text(0) == "Anagrafica Materiali":
             if "AnagraficaMateriali" not in self.widget_cache:
-                self.widget_cache["AnagraficaMateriali"] = DialogoAnagraficaMateriali()
+                self.widget_cache["AnagraficaMateriali"] = AnagraficaMateriali()
                 self.stack.addWidget(self.widget_cache["AnagraficaMateriali"])
             self.stack.setCurrentWidget(self.widget_cache["AnagraficaMateriali"])
         
@@ -218,37 +196,16 @@ class MainWindow(QMainWindow):
                 self.widget_cache["GestioneNoleggi"] = GestioneNoleggi()
                 self.stack.addWidget(self.widget_cache["GestioneNoleggi"])
             self.stack.setCurrentWidget(self.widget_cache["GestioneNoleggi"])
-            # self.widget_cache["SituazioneNoleggi"].load_noleggi() # Questa riga era per SituazioneNoleggi, non GestioneNoleggi
-
-        # --- INIZIO NUOVO CODICE PER GESTIRE CLICK SU "TESSERE NOLEGGI E CORSI" ---
-        # !!! NOME ESATTO DEL TESTO DEL MENU: "Crea Tessera Noleggi o Corsi"
-        elif item.text(0) == "Crea Tessera Noleggi o Corsi": # <<< CORRETTO QUI
-            # La chiave nella cache dovrebbe essere un nome semplice e unico
-            if "CreaTessera" not in self.widget_cache: # <<< CHIAVE SEMPLIFICATA
-                # DECOMMENTATO: Istanzia e aggiunge il widget
-                self.widget_cache["CreaTessera"] = FinestraCreaTessera() # <<< NOME CLASSE DAL TUO IMPORT
-                self.stack.addWidget(self.widget_cache["CreaTessera"])
-                # print("DEBUG: Crea Tessera Noleggi non ancora implementata.") # <<<< Rimuovi questa riga
-            self.stack.setCurrentWidget(self.widget_cache["CreaTessera"]) # <<< USA LA CHIAVE CORRETTA QUI
-        
-        # !!! NOME ESATTO DEL TESTO DEL MENU: "Gestisci Tessera Noleggi o Corsi"
-        elif item.text(0) == "Gestisci Tessera Noleggi o Corsi": # <<< CORRETTO QUI
-            print("DEBUG: Cliccato su Gestisci Tessera. Tentativo di caricare la finestra.")
-            # La chiave nella cache dovrebbe essere un nome semplice e unico
-            if "GestisciTessera" not in self.widget_cache: # <<< CHIAVE SEMPLIFICATA (come concordato)
-                # DECOMMENTATO QUANDO AVRAI LA CLASSE:
-                print("DEBUG: Finestra GestisciTessera non in cache. Creazione nuova istanza.") #
-                self.widget_cache["GestisciTessera"] = FinestraGestisciTessera() # <<< NOME CLASSE DA FUTURO IMPORT
-                self.stack.addWidget(self.widget_cache["GestisciTessera"])
-               # print("DEBUG: Gestisci Tessera Noleggi o Corsi non ancora implementata.") # <<< Lascia per ora, rimuovi dopo
-            self.stack.setCurrentWidget(self.widget_cache.get("GestisciTessera", self.widget_cache["Home"])) # <<< USA LA CHIAVE CORRETTA QUI, con fallback
-            print("DEBUG: Finestra GestisciTessera impostata come widget corrente.") # <<< AGGIUNGI QUESTO
-        # --- FINE NUOVO CODICE PER GESTIRE CLICK SU "TESSERE NOLEGGI E CORSI" ---
+            # AGGIUNGI QUESTA RIGA PER RICARICARE SEMPRE I DATI
+            # Assicurati che SituazioneNoleggi abbia un metodo load_noleggi pubblico
+            self.widget_cache["SituazioneNoleggi"].load_noleggi()
         
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
     
+    # Assicurati che lo stile venga applicato all'applicazione
+    # Questo è necessario per le QDialog come LoginDialog
     qss_path_app = Path(__file__).resolve().parent / "style.qss"
     if qss_path_app.exists():
         with open(qss_path_app, "r") as f:
@@ -258,13 +215,14 @@ if __name__ == "__main__":
     if login.exec() == QDialog.Accepted:
         username, _ = login.get_credentials()
         
-        ruolo = "user"
+        ruolo = "user" # Default a user generico se non admin/operatore
         if username == "admin":
             ruolo = "admin"
-        elif username == "operatore":
-            ruolo = "operatore"
+        elif username == "operatore": # Aggiunta la logica per l'operatore
+            ruolo = "operatore" 
         
         window = MainWindow(ruolo)
-        window.resize(1280, 800)
+        window.resize(1280, 800) # <-- AGGIUNGI QUESTA RIGA
+        #window.showMaximized() # Apre la finestra massimizzata per un look più professionale
         window.show()
         sys.exit(app.exec())
