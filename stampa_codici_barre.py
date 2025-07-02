@@ -8,7 +8,8 @@ from PySide6.QtGui import QFont
 from data_access import carica_materiali
 
 class FinestraStampaCodici(QWidget):
-    def __init__(self):
+    class FinestraStampaCodici(QWidget):
+     def __init__(self):
         super().__init__()
         self.setWindowTitle("Stampa Codici a Barre")
         self.resize(400, 300)
@@ -21,31 +22,35 @@ class FinestraStampaCodici(QWidget):
         materiali = carica_materiali()
         self.materiali = materiali
         self.materiali_dict = {}
+
+        # Questo ciclo popola correttamente la combobox
         for mat in materiali:
-            codice, tipo, nome, produttore = mat[0], mat[1], mat[2], mat[3]
+            # Accedi ai dati usando le chiavi (nomi delle colonne) come un dizionario
+            codice = mat.get('codice', '') # Usa .get() per sicurezza, con valore di default vuoto
+            tipo = mat.get('tipo', '')
+            nome = mat.get('nome', '')
+            produttore = mat.get('produttore', '')
+            
             self.combo_materiale.addItem(f"{codice} - {nome}", userData=codice)
             self.materiali_dict[codice] = mat
+        
+        # Tutto il blocco 'if mat: ... else:' che era qui è stato rimosso,
+        # perché era superfluo e causava l'errore.
 
-        self.checkbox_barcode = QCheckBox("Stampa Codice a Barre")
-        self.checkbox_barcode.setChecked(True)
-        self.checkbox_qrcode = QCheckBox("Stampa QR Code")
-
-        self.checkbox_solo_disponibili = QCheckBox("Solo disponibili")
-        self.checkbox_solo_disponibili.setChecked(True)
-
-        btn_stampa_singolo = QPushButton("Stampa Codice Singolo")
-        btn_stampa_singolo.clicked.connect(self.stampa_codice_singolo)
-
-        btn_stampa_multiplo = QPushButton("Stampa Tutti i Codici (con filtro)")
-        btn_stampa_multiplo.clicked.connect(self.stampa_codici_multipli)
-
-        layout.addWidget(QLabel("Materiale Singolo"))
         layout.addWidget(self.combo_materiale)
+        
+        # Se non ci sono materiali, mostra un messaggio informativo
+        if not materiali:
+            QMessageBox.information(self, "Nessun Materiale", "Nessun materiale disponibile nel database per la stampa.")
+
+        self.checkbox_barcode = QCheckBox("Includi Codice a Barre")
+        self.checkbox_qrcode = QCheckBox("Includi QR Code")
         layout.addWidget(self.checkbox_barcode)
         layout.addWidget(self.checkbox_qrcode)
-        layout.addWidget(self.checkbox_solo_disponibili)
-        layout.addWidget(btn_stampa_singolo)
-        layout.addWidget(btn_stampa_multiplo)
+
+        self.btn_stampa = QPushButton("Stampa PDF")
+        self.btn_stampa.clicked.connect(self.stampa_pdf)
+        layout.addWidget(self.btn_stampa)
 
         self.setLayout(layout)
 

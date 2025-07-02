@@ -18,13 +18,12 @@ from stampa_tessera_soci import stampa_tessera_pdf # Importa la funzione per sta
 
 
 class DialogoListaSoci(QDialog):
-    def __init__(self, parent=None):
+    def __init__(self, db_path, parent=None): # <-- MODIFICA QUESTA RIGA: aggiungi 'db_path'
         super().__init__(parent)
-        self.setWindowTitle("Lista Completa Soci")
+        self.db_path = db_path # <-- AGGIUNGI QUESTA RIGA: Salva il percorso del DB
+        self.setWindowTitle("Lista Completa Soci Cicolo Nautico Ceresio")
         self.setMinimumSize(900, 600)
-
-        self.init_ui()
-        self.carica_dati() # Carica i dati all'avvio
+        self.init_ui() # Inizializza l'interfaccia utente
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
@@ -55,7 +54,7 @@ class DialogoListaSoci(QDialog):
         self.btn_modifica = QPushButton("Modifica Socio")
         self.btn_tessera= QPushButton("Stampa Tessera") # Inizialmente disabilitato, abilitato dopo selezione
         self.btn_elimina = QPushButton("Elimina Socio")
-        self.btn_quota = QPushButton("Marca Quota Pagata")
+        self.btn_quota = QPushButton("Pagamento Quota Annuale")
         self.btn_esporta_excel = QPushButton("Esporta Excel")
         self.btn_chiudi = QPushButton("Chiudi")
 
@@ -79,10 +78,13 @@ class DialogoListaSoci(QDialog):
         self.btn_esporta_excel.clicked.connect(self.esporta_dati_excel)
         self.search_input.textChanged.connect(self.filtra_soci)
         self.tabella.doubleClicked.connect(self.apri_dialogo_modifica_socio) # Doppio click per modificare
+        self.carica_dati() # Carica i dati iniziali nella tabella
 
     def carica_dati(self):
         self.tabella.setRowCount(0) # Pulisce la tabella
-        soci = get_all_soci() # Ottiene tutti i soci dal database
+        soci = get_all_soci(self.db_path) # <-- MODIFICA QUESTA RIGA: passa 'self.db_path
+
+        #print(f"DEBUG: I dati restituiti da get_all_soci sono: {soci}") 
 
         for row_num, socio in enumerate(soci):
             self.tabella.insertRow(row_num)
@@ -123,22 +125,31 @@ class DialogoListaSoci(QDialog):
         if dialog.exec() == QDialog.Accepted:
             self.carica_dati() # Ricarica i dati dopo aver aggiunto un nuovo socio
 
+    # Nel file: dialogo_lista_soci.py
+
     def apri_dialogo_modifica_socio(self):
-        selected_rows = self.tabella.selectionModel().selectedRows()
-        if not selected_rows:
-            QMessageBox.warning(self, "Selezione", "Seleziona un socio dalla tabella per modificarlo.")
+        # RECUPERA L'ID DEL SOCIO SELEZIONATO DALLA TABELLA
+        row = self.tabella.currentRow()
+        if row < 0: # Nessuna riga selezionata
+            QMessageBox.warning(self, "Selezione Socio", "Seleziona un socio dalla lista per modificarlo.")
             return
 
-        row = selected_rows[0].row()
+        # L'ID del socio è nella prima colonna (indice 0)
         socio_id_item = self.tabella.item(row, 0)
-        if socio_id_item:
-            socio_id = int(socio_id_item.text())
-            dialog = DialogoSocio(socio_id=socio_id, parent=self)
-            if dialog.exec() == QDialog.Accepted:
-                self.carica_dati() # Ricarica i dati dopo aver modificato il socio
-        else:
-            QMessageBox.warning(self, "Errore", "ID Socio non trovato per la riga selezionata.")
+        if socio_id_item is None:
+            QMessageBox.warning(self, "Errore", "Impossibile recuperare l'ID del socio selezionato.")
+            return
 
+        socio_selezionato_id = int(socio_id_item.text())
+
+        # Questa è la riga cruciale che deve passare self.db_path e socio_selezionato_id
+        dialog = DialogoSocio(self.db_path, socio_id=socio_selezionato_id, parent=self) # <<< MODIFICA QUESTA RIGA
+        if dialog.exec() == QDialog.Accepted:
+            QMessageBox.information(self, "Informazione", "Socio modificato con successo.")
+            self.carica_dati() # Ricarica i dati dopo la modifica per vedere gli aggiornamenti
+        else:
+            QMessageBox.information(self, "Informazione", "Operazione di modifica socio annullata.")
+            
     def elimina_socio_selezionato(self):
         selected_rows = self.tabella.selectionModel().selectedRows()
         if not selected_rows:
@@ -155,7 +166,7 @@ class DialogoListaSoci(QDialog):
                                          QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
 
             if reply == QMessageBox.Yes:
-                if delete_socio(socio_id):
+                if delete_socio(self.db_path, socio_id): # 
                     QMessageBox.information(self, "Successo", "Socio eliminato con successo!")
                     self.carica_dati()
                 else:
@@ -166,7 +177,7 @@ class DialogoListaSoci(QDialog):
     def marca_quota_pagata(self):
         selected_rows = self.tabella.selectionModel().selectedRows()
         if not selected_rows:
-            QMessageBox.warning(self, "Selezione", "Seleziona un socio per marcare la quota pagata.")
+            QMessageBox.warning(self, "Selezione", "Seleziona un socio per Validare la quota annuale pagata.")
             return
 
         row = selected_rows[0].row()
@@ -224,6 +235,7 @@ class DialogoListaSoci(QDialog):
         socio_id_item = self.tabella.item(row, 0)
         if socio_id_item:
             socio_id = int(socio_id_item.text())
-            stampa_tessera_pdf(socio_id, parent_widget=self) # Chiama la funzione esterna
+            stampa_tessera_pdf(self.db_path, socio_id, parent_widget=self) # <<< AGGIUNTO self.db_path
+            QMessageBox.information(self, "Stampa Tessera", "Tessera stampata con successo!")
         else:
             QMessageBox.warning(self, "Errore", "ID Socio non trovato per la riga selezionata.")

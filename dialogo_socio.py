@@ -13,11 +13,12 @@ from PySide6.QtGui import QPixmap, QDoubleValidator
 from data_access import insert_socio_esteso, update_socio_esteso, get_socio_by_id, get_socio_photo_blob
 from codice_fiscale_utils import calcola_codice_fiscale # CORREZIONE QUI: Usa il nome corretto della funzione
 class DialogoSocio(QDialog):
-    def __init__(self, socio_id=None, parent=None):
+    def __init__(self, db_path, socio_id=None, parent=None): # <-- MODIFICA QUI: Aggiungi 'db_path'
         super().__init__(parent)
+        self.db_path = db_path # <-- AGGIUNGI QUI: Salva il db_path come variabile della classe
         self.socio_id = socio_id
         self.socio_data = None
-        self.photo_blob = None # Per memorizzare i dati binari dell'immagine
+        self.photo_blob = None
 
         self.setWindowTitle("Aggiungi Nuovo Socio" if socio_id is None else "Modifica Socio Esistente")
         self.setMinimumSize(800, 700) # Dimensioni minime per una buona leggibilità
@@ -28,8 +29,10 @@ class DialogoSocio(QDialog):
         self.init_ui()
 
         # Se in modalità modifica, carica i dati del socio
+
         if self.socio_id:
-            self.socio_data = get_socio_by_id(self.socio_id)
+    
+            self.socio_data = get_socio_by_id(self.db_path, self.socio_id)
             if self.socio_data:
                 self.populate_form()
             else:
@@ -262,6 +265,7 @@ class DialogoSocio(QDialog):
             "numero_tessera": self.inputs["numero_tessera"].text().strip(),
             "data_emissione": self.inputs["data_emissione"].date().toString("yyyy-MM-dd"),
             "data_scadenza": self.inputs["data_scadenza"].date().toString("yyyy-MM-dd"),
+            "foto_blob": self.photo_blob, # <--- AGGIUNGI QUESTA RIGA!
             "attivo": 1 # Per ora, assumiamo che i nuovi soci siano attivi
         }
         return data
@@ -299,10 +303,13 @@ class DialogoSocio(QDialog):
                 widget.setValue(int(value))
 
         # Popola la foto se presente
-        photo_blob = get_socio_photo_blob(self.socio_id)
+                # Popola la foto se presente
+        print(f"DEBUG (Popola Foto): Tentativo di recuperare foto per socio_id: {self.socio_id}")
+        photo_blob = get_socio_photo_blob(self.db_path, self.socio_id)
         if photo_blob:
             pixmap = QPixmap()
             pixmap.loadFromData(photo_blob)
+            print(f"DEBUG (Popola Foto): photo_blob recuperato. Dimensione: {len(photo_blob)} bytes.")
             # Scala la foto per adattarla al QLabel, mantenendo le proporzioni
             self.photo_label.setPixmap(pixmap.scaled(self.photo_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
             self.photo_blob = photo_blob # Memorizza per un potenziale ri-salvataggio

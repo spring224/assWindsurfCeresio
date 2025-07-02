@@ -40,23 +40,37 @@ from dialogo_socio import DialogoSocio # <--- MODIFICA/AGGIUNGI QUESTA RIGA
 
 
 class FinestraGestioneSoci(QWidget):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, db_path, parent=None):
+        print("DEBUG: FinestraGestioneSoci __init__ chiamata.")
+        super().__init__(parent)
+        self.db_path = db_path
         self.setWindowTitle("Gestione Soci Annuali")
-        self.setMinimumSize(700, 500) # Una dimensione di partenza più compatta
+        self.setMinimumSize(750, 550)
+        
+        # <<< AGGIUNGI QUESTA RIGA: CHIAMA init_ui() DAL COSTRUTTORE >>>
+        self.init_ui() 
+        # <<< Fine modifica >>>
 
-        self.init_ui()
 
     def init_ui(self):
         main_layout = QVBoxLayout(self)
+        #self.setStyleSheet("background-color: #FFAAAA;")
         main_layout.setAlignment(Qt.AlignCenter) # Centra i contenuti verticalmente
 
         # Titolo della finestra
-        title_label = QLabel("Pannello di Controllo Soci")
+        title_label = QLabel("Pannello Gestione Soci Annuali Circolo Nautico Ceresio")
         title_label.setAlignment(Qt.AlignCenter)
         # Questo è uno stile inline per rendere il titolo più visibile, il tuo QSS lo sovrascriverà
         title_label.setStyleSheet("font-size: 28px; font-weight: bold; margin-bottom: 20px;")
         main_layout.addWidget(title_label)
+
+         # --- INIZIO TEST VISUALE: AGGIUNGI QUESTO ---
+        #test_label = QLabel("--- QUESTA È LA FINESTRA GESTIONE SOCI ---")
+        #test_label.setStyleSheet("font-size: 30px; font-weight: bold; color: red; background-color: yellow;")
+        #test_label.setAlignment(Qt.AlignCenter) # Assicurati che Qt sia importato (dovrebbe esserlo)
+        #main_layout.addWidget(test_label)
+        # --- FINE TEST VISUALE ---
+
 
         # Layout per i pulsanti principali (Grid per coerenza e allineamento)
         buttons_grid_layout = QGridLayout()
@@ -110,7 +124,7 @@ class FinestraGestioneSoci(QWidget):
 
 
     def apri_dialogo_aggiungi_socio(self):
-        dialog = DialogoSocio(parent=self) # Crea il dialogo per un nuovo socio (socio_id=None di default)
+        dialog = DialogoSocio(self.db_path, parent=self) # 
         if dialog.exec() == QDialog.Accepted:
            QMessageBox.information(self, "Informazione", "Nuovo socio aggiunto con successo.")
         # QUI: Potresti voler aggiornare la lista dei soci nella finestra principale
@@ -120,36 +134,35 @@ class FinestraGestioneSoci(QWidget):
 
     # ... all'interno della classe FinestraGestioneSoci ...
 
-    def apri_dialogo_modifica_socio(self):
-        # QUESTO È UN ESEMPIO: DOVRAI RECUPERARE L'ID DEL SOCIO SELEZIONATO DALLA TUA TABELLA/LISTA
-        # Per ora, usiamo un ID di esempio per testare la modalità modifica.
-        socio_selezionato_id = 1 # Esempio: modifica il socio con ID 1
+   # Nel file: dialogo_lista_soci.py
 
-        if socio_selezionato_id is None:
+    def apri_dialogo_modifica_socio(self):
+        # RECUPERA L'ID DEL SOCIO SELEZIONATO DALLA TABELLA
+        row = self.tabella.currentRow()
+        if row < 0: # Nessuna riga selezionata
             QMessageBox.warning(self, "Selezione Socio", "Seleziona un socio dalla lista per modificarlo.")
             return
 
-        dialog = DialogoSocio(socio_id=socio_selezionato_id, parent=self)
+        # L'ID del socio è nella prima colonna (indice 0)
+        socio_id_item = self.tabella.item(row, 0)
+        if socio_id_item is None:
+            QMessageBox.warning(self, "Errore", "Impossibile recuperare l'ID del socio selezionato.")
+            return
+
+        socio_selezionato_id = int(socio_id_item.text())
+
+        # Ora socio_selezionato_id contiene l'ID corretto
+        dialog = DialogoSocio(self.db_path, socio_id=socio_selezionato_id, parent=self)
         if dialog.exec() == QDialog.Accepted:
             QMessageBox.information(self, "Informazione", "Socio modificato con successo.")
-            # QUI: Potresti voler aggiornare la lista dei soci nella finestra principale
-            # self.carica_dati() # Se hai un metodo per ricaricare i dati della tabella
+            self.carica_dati() # Ricarica i dati dopo la modifica per vedere gli aggiornamenti
         else:
             QMessageBox.information(self, "Informazione", "Operazione di modifica socio annullata.")
 
-    def apri_dialogo_lista_soci(self):
-            QMessageBox.information(self, "Funzionalità", "Qui si aprirà la finestra con la LISTA COMPLETA dei soci (tabella).")
-            # Q_MessageBox.information(self, "Funzionalità", "Qui si aprirà la finestra con la LISTA COMPLETA dei soci (tabella).") # Rimuovi o commenta questa riga di test
-
-            # Crea e mostra il dialogo della lista soci
-            dialog = DialogoListaSoci(self) # 'self' imposta la finestra padre
-            dialog.exec() # Mostra il dialogo in modo modale (blocca la finestra padre finché non viene chiuso)
-
-    # ... (all'interno della classe FinestraGestioneSoci, ad esempio dopo init_ui o altri metodi simili) ...
 
     def apri_dialogo_lista_soci(self):
         """Apre il dialogo per visualizzare e gestire la lista dei soci."""
-        dialog = DialogoListaSoci(parent=self) # Crea un'istanza del dialogo della lista
+        dialog = DialogoListaSoci(self.db_path, parent=self) # Crea un'istanza del dialogo della lista
         dialog.exec() # Mostra il dialogo in modalità modale (blocca la finestra padre finché non viene chiuso)
         # Dopo che il dialogo della lista è stato chiuso, potresti voler ricaricare i dati
         # nella tua FinestraGestioneSoci se avesse una visualizzazione dei soci (che ora non ha)
@@ -165,26 +178,9 @@ class FinestraGestioneSoci(QWidget):
         dialog.exec()
 
     def apri_dialogo_comunicazioni_soci(self):
-        dialog = DialogoComunicazioni(self) # 'self' imposta la finestra padre
-        dialog.exec() # Mostra il dialogo in modo modale
+        # Prima era: dialog = DialogoComunicazioni(self)
+        # Adesso: Passiamo self.db_path
+        dialog = DialogoComunicazioni(self.db_path, self) # <<< MODIFICA QUESTA RIGA
+        dialog.exec()
 
-    # --- Rimuovi TUTTI gli altri metodi che non sono stati inclusi qui sopra. ---
-    # Questi metodi (come carica_dati, filtra_soci, seleziona_socio, ecc.)
-    # non appartengono più a questa classe "Pannello di Controllo".
-    # Li sposteremo nelle nuove classi di dialogo pertinenti.
-    # Ad esempio, il metodo 'carica_dati' che popolava la tabella, non serve più qui.
-    # Anche tutti i metodi per la stampa tessera, l'aggiornamento quota, ecc.,
-    # andranno nei rispettivi nuovi dialoghi.
-
-# --- FINE della classe FinestraGestioneSoci ---
-
-# Non modificare la parte 'if __name__ == "__main__":' in questo file.
-# Se presente, lasciala come test temporaneo solo per questa finestra, ma la principale
-# esecuzione sarà sempre da main_albero_menu.py.
-# if __name__ == "__main__":
-#     import sys
-#     from PySide6.QtWidgets import QApplication
-#     app = QApplication(sys.argv)
-#     window = FinestraGestioneSoci()
-#     window.show()
-#     sys.exit(app.exec())
+    

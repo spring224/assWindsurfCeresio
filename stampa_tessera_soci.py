@@ -9,23 +9,24 @@ from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 from reportlab.lib.colors import HexColor, black
 from reportlab.lib.utils import ImageReader
-import qrcode
-from PIL import Image as PilImage
 from io import BytesIO
-
+import qrcode
+from PIL import Image as PilImage # Mantiene questo per l'uso di PilImage.open/thumbnail
+from qrcode.image.pil import PilImage as PilImageForQR # ***NUOVO IMPORT PER QR CODE***
 # Importa la funzione get_socio_photo_blob e get_socio_by_id da data_access
 from data_access import get_socio_by_id, get_socio_photo_blob
 
 # Definizione della directory per le foto dei soci (deve esistere)
 FOTO_SOCI_DIR = os.path.join(os.path.dirname(__file__), "foto_soci")
 
-def stampa_tessera_pdf(socio_id, parent_widget=None):
+def stampa_tessera_pdf(db_path, socio_id, parent_widget=None): # <<< VERIFICA QUESTI ARGOMENTI!
     CARD_WIDTH = 85.6 * mm
     CARD_HEIGHT = 53.98 * mm
     ORANGE_DUTCH = HexColor('#FF7F00')
     LOGO_PATH = os.path.join(os.path.dirname(__file__), "logo_onda.png") # Percorso assoluto
 
-    socio = get_socio_by_id(socio_id)
+    socio = get_socio_by_id(db_path, socio_id)
+    
     if not socio:
         QMessageBox.warning(parent_widget, "Errore", "Socio non trovato nel database. Impossibile stampare la tessera.")
         return
@@ -83,7 +84,8 @@ def stampa_tessera_pdf(socio_id, parent_widget=None):
         photo_width = 20 * mm
         photo_height = 28 * mm
         
-        photo_blob = get_socio_photo_blob(socio_id) # Ottieni il BLOB direttamente
+
+        photo_blob = get_socio_photo_blob(db_path, socio_id) #
         if photo_blob:
             try:
                 pixmap = QPixmap()
@@ -126,7 +128,8 @@ def stampa_tessera_pdf(socio_id, parent_widget=None):
                        f"Scadenza: {socio.get('data_scadenza', 'N/A')}")
             qr.add_data(qr_data)
             qr.make(fit=True)
-            qr_img = qr.make_image(image_factory=PilImage)
+
+            qr_img = qr.make_image(image_factory=PilImageForQR) # 
             img_bytes = BytesIO()
             qr_img.save(img_bytes, format='PNG')
             img_bytes.seek(0)
