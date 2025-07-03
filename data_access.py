@@ -1,30 +1,141 @@
-
 import sqlite3
 import os
-from pathlib import Path  # ✅ nuova riga
-from datetime import datetime
+import sys
+import logging
+from pathlib import Path
+from appdirs import user_data_dir
+import configparser
+import datetime
 
-BASE_DIR = Path(__file__).resolve().parent
-db_path = BASE_DIR / "gestione_dati" / "applicazionedb.db"
+# Configurazione del logging
+logging.basicConfig(level=logging.DEBUG, format='%(levelname)s (%(name)s - %(funcName)s): %(message)s')
+logger = logging.getLogger(__name__)
 
-#def get_connection():
- #   return sqlite3.connect(db_path)
+# --- Gestione della Configurazione ---
+config = configparser.ConfigParser()
 
-# Modifica la funzione get_connection per accettare il percorso del DB
-def get_connection(db_path):
+# Determina il percorso del config.ini
+if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+    # In ambiente PyInstaller (eseguibile)
+    config_path = Path(sys._MEIPASS) / "config.ini"
+else:
+    # In ambiente di sviluppo (cerca nella directory principale del progetto)
+    # Assumiamo che config.ini sia nella root del progetto e data_access.py in una sottodirectory.
+    # Se data_access.py è in windsurf_desktop/gestione_dati/, allora parents[1] risale a windsurf_desktop/
+    config_path = Path(__file__).resolve().parents[1] / "config.ini"
+
+# Carica il file di configurazione
+if config_path.exists():
+    config.read(config_path)
+    logger.debug(f"Caricato file di configurazione da: {config_path}")
+else:
+    logger.warning(f"File di configurazione '{config_path}' non trovato. Usando configurazione predefinita per AppInfo e Database.")
+
+# Leggi APP_NAME e APP_AUTHOR dal config.ini, con fallback se non trovati
+APP_NAME = config.get('AppInfo', 'app_name', fallback='DefaultApp')
+APP_AUTHOR = config.get('AppInfo', 'app_author', fallback='DefaultAuthor')
+logger.debug(f"APP_NAME: {APP_NAME}, APP_AUTHOR: {APP_AUTHOR}")
+# --- Fine Gestione Configurazione ---
+
+
+# --- Logica per la gestione del percorso del DB ---
+# Percorso predefinito del database per lo sviluppo (relativo al modulo data_access)
+DEFAULT_DEV_DB_PATH = Path(__file__).resolve().parent / "gestione_dati" / "applicazionedb.db"
+
+db_path = None
+
+# 1. Controlla se un percorso DB è specificato nel config.ini
+if 'Database' in config and 'database_path' in config['Database']:
+    configured_db_path = config['Database']['database_path']
+    if configured_db_path: # Se non è vuoto
+        db_path = Path(configured_db_path)
+        logger.debug(f"Percorso DB da config.ini: {db_path}")
+
+# 2. Se non configurato o vuoto, usa la logica basata sull'ambiente
+if db_path is None:
+    if getattr(sys, 'frozen', False):
+        # Siamo in un eseguibile (PyInstaller)
+        data_dir = user_data_dir(APP_NAME, APP_AUTHOR) # Ora usa APP_NAME e APP_AUTHOR da config.ini
+        db_file_name = "applicazionedb.db"
+        db_path = Path(data_dir) / db_file_name
+        logger.debug(f"Percorso DB (eseguibile): {db_path}")
+    else:
+        # Siamo in ambiente di sviluppo
+        db_path = DEFAULT_DEV_DB_PATH
+        logger.debug(f"Percorso DB (sviluppo): {db_path}")
+
+# Assicurati che la directory del database esista
+os.makedirs(db_path.parent, exist_ok=True)
+# --- Fine Logica Percorso DB ---
+
+# ... (il resto del tuo data_access.py, incluse le funzioni get_connection(), create_tables(), ecc.) ...
+
+# Assicurati che la funzione get_connection() sia definita così:
+def get_connection():
     conn = None
     try:
-        conn = sqlite3.connect(db_path) # Usa il percorso fornito
-        conn.execute("PRAGMA foreign_keys = ON") # Assicurati che le FK siano attive
+        logger.debug(f"Tentativo di connessione al database in {db_path}")
+        conn = sqlite3.connect(db_path)
+        conn.execute("PRAGMA foreign_keys = ON")
     except sqlite3.Error as e:
-        print(f"Errore di connessione al database: {e}")
-        # Potresti voler lanciare l'eccezione o gestirla diversamente
-        raise # Rilancia l'eccezione per gestirla a livello superiore
+        logger.error(f"Errore di connessione al database: {e}")
+        raise
     return conn
 
+# E la funzione initialize_db() (che dovrebbe essere chiamata dal main_albero_menu.py)
+def initialize_db():
+    try:
+        conn = get_connection()
+        create_tables(conn)
+        conn.close()
+        logger.info("Database inizializzato o tabelle verificate.")
+    except Exception as e:
+        logger.error(f"Errore durante l'inizializzazione del database: {e}")
+        raise # Rilancia l'eccezione
+
+# ... (il resto del tuo data_access.py) ...
+
+def create_tables(conn):
+    """Crea le tabelle del database se non esistono."""
+    try:
+        cursor = conn.cursor()
+
+        # Le tue tabelle esistenti (es. soci, lezioni, materiali)
+        # Assicurati che il codice per crearle sia qui, ad esempio:
+        # cursor.execute("""
+        #     CREATE TABLE IF NOT EXISTS soci (
+        #         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        #         nome TEXT NOT NULL,
+        #         cognome TEXT NOT NULL,
+        #         email TEXT UNIQUE,
+        #         telefono TEXT,
+        #         data_iscrizione TEXT,
+        #         data_rinnovo TEXT,
+        #         quota_pagata REAL DEFAULT 0.0
+        #     )
+        # """)
+        # ... (altre tabelle) ...
+
+        # --- Codice per la TABELLA DUMMY di TEST ---
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS test_dummy (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                messaggio TEXT NOT NULL,
+                timestamp TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        logger.info("Tabella 'test_dummy' verificata/creata.")
+        # --- Fine Codice TABELLA DUMMY ---
+
+        conn.commit()
+        logger.info("Tabelle del database verificate/create con successo.")
+    except sqlite3.Error as e:
+        logger.error(f"Errore durante la creazione delle tabelle: {e}")
+        raise # Rilancia l'eccezione
+
 # Funzione per ottenere tutti i soci (dovrà essere aggiornata anche nel DialogoListaSoci)
-def get_all_soci(db_path):
-    conn = get_connection(db_path)
+def get_all_soci():
+    conn = get_connection()
     conn.row_factory = sqlite3.Row # QUESTA RIGA È FONDAMENTALE
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM soci ORDER BY cognome, nome")
@@ -34,7 +145,7 @@ def get_all_soci(db_path):
 
 
 def insert_socio(nome, cognome, email, quota_pagata):
-    conn = get_connection(db_path)
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
         "INSERT INTO soci (nome, cognome, email, quota_pagata) VALUES (?, ?, ?, ?)",
@@ -45,7 +156,7 @@ def insert_socio(nome, cognome, email, quota_pagata):
 
 # Funzione per inserire un nuovo socio (aggiornata per i nuovi campi)
 def insert_socio_esteso(dati):
-    conn = get_connection(db_path)
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
         """
@@ -87,7 +198,7 @@ def insert_socio_esteso(dati):
 
 
 def update_socio(id_socio, nome, cognome, email, quota_pagata):
-    conn = get_connection(db_path)
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute(
         "UPDATE soci SET nome = ?, cognome = ?, email = ?, quota_pagata = ? WHERE id = ?",
@@ -96,10 +207,11 @@ def update_socio(id_socio, nome, cognome, email, quota_pagata):
     conn.commit()
     conn.close()
 
-def get_socio_by_id(db_path, socio_id): # <<< DEVE ESSERE COSÌ
+def get_socio_by_id(socio_id): # <<< DEVE ESSERE COSÌ
     conn = None
     try:
-        conn = sqlite3.connect(db_path) # Assicurati che db_path venga usato qui per connettersi
+        conn = get_connection()
+        # Assicurati che db_path venga usato qui per connettersi
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM soci WHERE id = ?", (socio_id,))
         row = cursor.fetchone()
@@ -117,7 +229,7 @@ def get_socio_by_id(db_path, socio_id): # <<< DEVE ESSERE COSÌ
             
 # Funzione per aggiornare un socio (aggiornata per i nuovi campi)
 def update_socio_esteso(id_socio, dati):
-    conn = get_connection(db_path)
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("""
         UPDATE soci
@@ -139,7 +251,7 @@ def update_socio_esteso(id_socio, dati):
     conn.commit()
     conn.close()
 
-def delete_socio(db_path, socio_id):
+def delete_socio(socio_id):
     """
     Elimina un socio dal database dato il suo ID.
     :param db_path: Percorso al file del database.
@@ -148,7 +260,7 @@ def delete_socio(db_path, socio_id):
     """
     conn = None
     try:
-        conn = get_connection(db_path) # Usa il db_path passato
+        conn = get_connection() # Usa il db_path passato
         cursor = conn.cursor()
         cursor.execute("DELETE FROM soci WHERE id = ?", (socio_id,))
         conn.commit()
@@ -166,7 +278,7 @@ def mark_quota_pagata(socio_id):
     conn = None # Inizializza conn a None per la finally bloc
     print(f"DEBUG sono nella Mark_quota_pagata socio ID {socio_id}")
     try:
-        conn = get_connection(db_path) # Ottieni la connessione UNA VOLTA
+        conn = get_connection() # Ottieni la connessione UNA VOLTA
         cursor = conn.cursor()  # Ottieni il cursore correttamente chiamando il metodo
 
         current_year = datetime.now().year # Anno corrente
@@ -195,10 +307,10 @@ def mark_quota_pagata(socio_id):
 
 # Funzioni placeholder per futuro utilizzo
 
-def get_socio_photo_blob(db_path, socio_id):
+def get_socio_photo_blob(socio_id):
     conn = None
     try:
-        conn = sqlite3.connect(db_path) # Assicurati che db_path venga usato qui
+        conn = get_connection() # Assicurati che db_path venga usato qui
         cursor = conn.cursor()
         # *** QUESTA È LA CORREZIONE CHIAVE: USIAMO 'foto' INVECE DI 'foto_blob' ***
         cursor.execute("SELECT foto FROM soci WHERE id = ?", (socio_id,))
@@ -215,7 +327,7 @@ def get_socio_photo_blob(db_path, socio_id):
 
 
 def elimina_materiale(id_materiale):
-    conn = get_connection(db_path)
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('DELETE FROM materiali WHERE id = ?', (id_materiale,))
     conn.commit()
@@ -223,7 +335,7 @@ def elimina_materiale(id_materiale):
 
 
 def carica_materiali():
-    conn = get_connection(db_path)
+    conn = get_connection()
     cursor = conn.cursor()
     # MODIFICA QUI: Elenco esplicito di TUTTE le 14 colonne nell'ordine del tuo schema.
     cursor.execute("""
@@ -237,7 +349,7 @@ def carica_materiali():
 
 
 def carica_materiali_per_tipo(tipo):
-    conn = get_connection(db_path)
+    conn = get_connection()
     cursor = conn.cursor()
     #cursor.execute("PRAGMA table_info(materiali)")
     #cols = cursor.fetchall()
@@ -249,7 +361,7 @@ def carica_materiali_per_tipo(tipo):
     return risultati
 
 def get_materiali_disponibili():
-    conn = get_connection(db_path)
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT id, codice, nome, tipo, produttore ,descrizione , note FROM materiali WHERE disponibile = 1")
     rows = cursor.fetchall()
@@ -267,7 +379,7 @@ def get_materiali_disponibili():
     ]
 
 def carica_materiali_rig():
-    conn = get_connection(db_path)
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('SELECT * FROM materiali WHERE rig = 1')
     risultati = cursor.fetchall()
@@ -275,7 +387,7 @@ def carica_materiali_rig():
     return risultati
 
 def recupera_foto_materiale(id_materiale):
-    conn = get_connection(db_path)
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT foto FROM materiali WHERE id = ?", (id_materiale,))
     risultato = cursor.fetchone()
@@ -292,7 +404,7 @@ def get_materiale_by_id(materiale_id: int) -> dict:
     """
     conn = None
     try:
-        conn = get_connection(db_path)
+        conn = get_connection()
         conn.row_factory = sqlite3.Row # Per accedere ai risultati come dizionari
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM Materiali WHERE id = ?", (materiale_id,))
@@ -310,7 +422,7 @@ def get_materiale_by_id(materiale_id: int) -> dict:
 #Sezione Gestione Noleggi
 
 def inserisci_noleggio(nome, cognome, id_materiale, codice_materiale, data, ora, durata, doc_path, lingua):
-    conn = get_connection(db_path)
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('''
         INSERT INTO Noleggi 
@@ -322,14 +434,14 @@ def inserisci_noleggio(nome, cognome, id_materiale, codice_materiale, data, ora,
     aggiorna_disponibilita_materiale(id_materiale, 0)
 
 def aggiorna_disponibilita_materiale(id_materiale, disponibile):
-    conn = get_connection(db_path)
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute('UPDATE Materiali SET disponibile = ? WHERE id = ?', (disponibile, id_materiale))
     conn.commit()
     conn.close()
 
 def get_materiale_by_barcode(codice):
-    conn = get_connection(db_path)
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT id, codice, nome, tipo, produttore, descrizione, note FROM materiali WHERE codice = ?", (codice,))
     result = cursor.fetchone()
@@ -359,7 +471,7 @@ def get_noleggi_attivi() -> list:
     conn = None
     noleggi_attivi = []
     try:
-        conn = get_connection(db_path)
+        conn = get_connection()
         conn.row_factory = sqlite3.Row # Per accedere ai risultati come dizionari
         cursor = conn.cursor()
 
@@ -436,7 +548,7 @@ def chiudi_noleggio(noleggio_id: int) -> bool:
     """
     conn = None
     try:
-        conn = get_connection(db_path)
+        conn = get_connection()
         conn.row_factory = sqlite3.Row 
         cursor = conn.cursor()
 
@@ -488,7 +600,7 @@ def salva_ricevuta(
     numero_ricevuta_testo, # Valore per la colonna 'numero' (es. "0001/2024")
     anno_ricevuta_da_testo # Valore per la colonna 'anno' (l'anno numerico dalla stringa "0001/2024")
 ): 
-    conn = get_connection(db_path)
+    conn = get_connection()
     cur = conn.cursor()
 
     try:
@@ -535,7 +647,7 @@ def salva_ricevuta(
 
 
 def get_prossimo_numero_ricevuta(anno):
-    conn = get_connection(db_path)
+    conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM Ricevute WHERE anno = ?", (anno,))
     count = cursor.fetchone()[0] + 1
@@ -543,7 +655,7 @@ def get_prossimo_numero_ricevuta(anno):
     return f"{count:02}/{anno}"
 
 def get_noleggio_attivo_per_cliente(nome, cognome, codice_materiale):
-    conn = get_connection(db_path)
+    conn = get_connection()
     conn.row_factory = sqlite3.Row
     cursor = conn.cursor()
     cursor.execute("""
@@ -563,7 +675,7 @@ def carica_listino():
     conn = None
     listino = []
     try:
-        conn = get_connection(db_path)
+        conn = get_connection()
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         # Seleziona anche nome_materiale
@@ -580,7 +692,7 @@ def carica_listino():
 def salva_listino(righe_listino):
     conn = None
     try:
-        conn = get_connection(db_path)
+        conn = get_connection()
         cursor = conn.cursor()
         conn.execute("BEGIN TRANSACTION")
         cursor.execute("DELETE FROM ListinoNoleggio")
@@ -612,7 +724,7 @@ def get_all_material_types_and_names():
     conn = None
     materials = []
     try:
-        conn = get_connection(db_path)
+        conn = get_connection()
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         # Seleziona tipo e nome distinti da Materiali
@@ -628,7 +740,7 @@ def get_all_material_types_and_names():
             conn.close()
 
 def get_prezzo_orario_by_tipo(tipo):
-    conn = get_connection(db_path)
+    conn = get_connection()
     conn.row_factory = sqlite3.Row
     cur = conn.cursor()
     cur.execute("SELECT prezzo_orario FROM ListinoNoleggio WHERE tipo = ?", (tipo,))
@@ -637,7 +749,7 @@ def get_prezzo_orario_by_tipo(tipo):
     return row["prezzo_orario"] if row else 0.0
 
 def aggiorna_importo_noleggio(id_noleggio, importo):
-    conn = get_connection(db_path)
+    conn = get_connection()
     cur = conn.cursor()
     cur.execute("UPDATE Noleggi SET importo_calcolato = ? WHERE id = ?", (importo, id_noleggio))
     conn.commit()
@@ -645,7 +757,7 @@ def aggiorna_importo_noleggio(id_noleggio, importo):
 
 
 def get_prossimo_numero_ricevuta():
-    conn = get_connection(db_path)
+    conn = get_connection()
     anno_corrente = datetime.now().year
     prossimo_numero = 1
 
@@ -682,7 +794,7 @@ def inserisci_noleggio(
     data_inizio,       # Questo l'abbiamo aggiunto prima
     ora_inizio         # <--- AGGIUNTO ANCHE QUESTO PARAMETRO ORA
     ):
-    conn = get_connection(db_path)
+    conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute("""
@@ -721,7 +833,7 @@ def inserisci_noleggio(
 
 
 def inserisci_dettaglio_noleggio(id_noleggio, id_materiale, codice_materiale):
-    conn = get_connection(db_path)
+    conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute("""
@@ -737,7 +849,7 @@ def inserisci_dettaglio_noleggio(id_noleggio, id_materiale, codice_materiale):
         conn.close()
 
 def aggiorna_disponibilita_materiale(id_materiale, disponibilita):
-    conn = get_connection(db_path)
+    conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute("""
@@ -757,7 +869,7 @@ def get_dettagli_materiali_by_noleggio_id(id_noleggio):
     dalla tabella dettagli_noleggio.
     Ritorna una lista di tuple (id_materiale, codice_materiale).
     """
-    conn = get_connection(db_path)
+    conn = get_connection()
     cursor = conn.cursor()
     try:
         cursor.execute("""
@@ -782,7 +894,7 @@ def aggiorna_disponibilita_materiale_by_id(materiale_id: int, disponibilita: int
     """
     conn = None
     try:
-        conn = get_connection(db_path)
+        conn = get_connection()
         cursor = conn.cursor()
 
         cursor.execute("""
@@ -808,7 +920,7 @@ def aggiorna_disponibilita_materiale_by_id(materiale_id: int, disponibilita: int
 def inserisci_materiale(dati):
     conn = None
     try:
-        conn = get_connection(db_path)
+        conn = get_connection()
         cursor = conn.cursor()
 
         # Estrai le chiavi (nomi delle colonne) e i valori dal dizionario
@@ -837,7 +949,7 @@ def inserisci_materiale(dati):
 def aggiorna_materiale(material_id, dati): # <--- MODIFICA QUI: aggiunto material_id
     conn = None
     try:
-        conn = get_connection(db_path)
+        conn = get_connection()
         cursor = conn.cursor()
 
         # Costruisci la parte SET della query dinamicamente
@@ -870,7 +982,7 @@ def carica_materiali():
     conn = None
     materiali = []
     try:
-        conn = get_connection(db_path)
+        conn = get_connection()
         conn.row_factory = sqlite3.Row  # Questo permette di accedere ai dati per nome colonna
         cursor = conn.cursor()
         cursor.execute("""
@@ -894,7 +1006,7 @@ def get_materiale_by_id(material_id):
     conn = None
     materiale = None
     try:
-        conn = get_connection(db_path)
+        conn = get_connection()
         conn.row_factory = sqlite3.Row # Per accedere ai risultati per nome colonna
         cursor = conn.cursor()
         cursor.execute("""
@@ -919,7 +1031,7 @@ def carica_materiali_rig():
     conn = None
     materiali_rig = []
     try:
-        conn = get_connection(db_path)
+        conn = get_connection()
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute("""
@@ -942,7 +1054,7 @@ def carica_materiali_per_tipo(tipo_selezionato):
     conn = None
     materiali_per_tipo = []
     try:
-        conn = get_connection(db_path)
+        conn = get_connection()
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute("""
@@ -966,7 +1078,7 @@ def get_all_material_types() -> list[str]:
     conn = None
     tipi = []
     try:
-        conn = get_connection(db_path)
+        conn = get_connection()
         # Non impostiamo row_factory qui perché vogliamo una tupla semplice
         # per accedere a row[0] (il valore del tipo).
         cursor = conn.cursor()
@@ -991,7 +1103,7 @@ def cerca_o_crea_cliente(nome: str, cognome: str, email: str = None, telefono: s
     """
     conn = None
     try:
-        conn = get_connection(db_path)
+        conn = get_connection()
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
 
@@ -1033,7 +1145,7 @@ def salva_tessera(id_cliente: int, tipo_tessera: str, prezzo_totale: float, nume
     """
     conn = None
     try:
-        conn = get_connection(db_path)
+        conn = get_connection()
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO Tessere (id_cliente, tipo_tessera, prezzo_totale, numero_item_totale, data_creazione)
@@ -1059,7 +1171,7 @@ def get_tessere(solo_attive: bool = True):
     conn = None
     tessere = []
     try:
-        conn = get_connection(db_path)
+        conn = get_connection()
         conn.row_factory = sqlite3.Row # Per accedere ai risultati come dizionario
         cursor = conn.cursor()
 
@@ -1107,7 +1219,7 @@ def usa_item_tessera(id_tessera: int) -> bool:
     """
     conn = None
     try:
-        conn = get_connection(db_path)
+        conn = get_connection()
         cursor = conn.cursor()
 
         # 1. Recupera lo stato attuale della tessera
@@ -1162,7 +1274,7 @@ def salva_lezione_programmata(id_tessera: int, data_lezione: str, ora_lezione: s
     """
     conn = None
     try:
-        conn = get_connection(db_path)
+        conn = get_connection()
         cursor = conn.cursor()
         cursor.execute("""
             INSERT INTO LezioniProgrammate 
@@ -1187,7 +1299,7 @@ def get_lezioni_per_data(data: str) -> list:
     conn = None
     lezioni = []
     try:
-        conn = get_connection(db_path)
+        conn = get_connection()
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute("""
@@ -1217,7 +1329,7 @@ def get_lezione_by_id(id_lezione: int):
     """
     conn = None
     try:
-        conn = get_connection(db_path)
+        conn = get_connection()
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         cursor.execute("""
@@ -1247,7 +1359,7 @@ def aggiorna_stato_lezione(id_lezione: int, confermata: int = None, completata: 
     """
     conn = None
     try:
-        conn = get_connection(db_path)
+        conn = get_connection()
         cursor = conn.cursor()
         
         updates = []
@@ -1284,7 +1396,7 @@ def cancella_lezione_programmata(id_lezione: int) -> bool:
     """
     conn = None
     try:
-        conn = get_connection(db_path)
+        conn = get_connection()
         cursor = conn.cursor()
         cursor.execute("DELETE FROM LezioniProgrammate WHERE id = ?", (id_lezione,))
         conn.commit()
@@ -1305,7 +1417,7 @@ def get_tessere_per_selezione_lezione():
     conn = None
     tessere = []
     try:
-        conn = get_connection(db_path)
+        conn = get_connection()
         conn.row_factory = sqlite3.Row
         cursor = conn.cursor()
         # Seleziona solo le tessere che hanno ancora item disponibili e sono attive

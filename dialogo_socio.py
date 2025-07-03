@@ -13,9 +13,9 @@ from PySide6.QtGui import QPixmap, QDoubleValidator
 from data_access import insert_socio_esteso, update_socio_esteso, get_socio_by_id, get_socio_photo_blob
 from codice_fiscale_utils import calcola_codice_fiscale # CORREZIONE QUI: Usa il nome corretto della funzione
 class DialogoSocio(QDialog):
-    def __init__(self, db_path, socio_id=None, parent=None): # <-- MODIFICA QUI: Aggiungi 'db_path'
+    def __init__(self,socio_id=None, parent=None): # <-- MODIFICA QUI: Aggiungi 'db_path'
         super().__init__(parent)
-        self.db_path = db_path # <-- AGGIUNGI QUI: Salva il db_path come variabile della classe
+        #self.db_path = db_path # <-- AGGIUNGI QUI: Salva il db_path come variabile della classe
         self.socio_id = socio_id
         self.socio_data = None
         self.photo_blob = None
@@ -32,7 +32,7 @@ class DialogoSocio(QDialog):
 
         if self.socio_id:
     
-            self.socio_data = get_socio_by_id(self.db_path, self.socio_id)
+            self.socio_data = get_socio_by_id(self.socio_id)
             if self.socio_data:
                 self.populate_form()
             else:
@@ -305,7 +305,7 @@ class DialogoSocio(QDialog):
         # Popola la foto se presente
                 # Popola la foto se presente
         print(f"DEBUG (Popola Foto): Tentativo di recuperare foto per socio_id: {self.socio_id}")
-        photo_blob = get_socio_photo_blob(self.db_path, self.socio_id)
+        photo_blob = get_socio_photo_blob(self.socio_id)
         if photo_blob:
             pixmap = QPixmap()
             pixmap.loadFromData(photo_blob)
@@ -384,6 +384,7 @@ class DialogoSocio(QDialog):
             # Chiama la funzione esterna per il calcolo del codice fiscale
     
             cf = calcola_codice_fiscale(nome, cognome, data_nascita_str, sesso, luogo_nascita) # <--- MODIFICATO
+            print(f"DEBUG (Calcolo CF): Codice Fiscale calcolato: {cf}")
             self.inputs["codice_fiscale"].setText(cf.upper())
         except Exception as e:
             QMessageBox.critical(self, "Errore Calcolo CF", f"Impossibile calcolare il Codice Fiscale: {e}. Controlla i dati inseriti.")

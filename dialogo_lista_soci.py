@@ -18,9 +18,9 @@ from stampa_tessera_soci import stampa_tessera_pdf # Importa la funzione per sta
 
 
 class DialogoListaSoci(QDialog):
-    def __init__(self, db_path, parent=None): # <-- MODIFICA QUESTA RIGA: aggiungi 'db_path'
+    def __init__(self,parent=None): # <-- MODIFICA QUESTA RIGA: aggiungi 'db_path'
         super().__init__(parent)
-        self.db_path = db_path # <-- AGGIUNGI QUESTA RIGA: Salva il percorso del DB
+        #self.db_path = db_path # <-- AGGIUNGI QUESTA RIGA: Salva il percorso del DB
         self.setWindowTitle("Lista Completa Soci Cicolo Nautico Ceresio")
         self.setMinimumSize(900, 600)
         self.init_ui() # Inizializza l'interfaccia utente
@@ -82,7 +82,7 @@ class DialogoListaSoci(QDialog):
 
     def carica_dati(self):
         self.tabella.setRowCount(0) # Pulisce la tabella
-        soci = get_all_soci(self.db_path) # <-- MODIFICA QUESTA RIGA: passa 'self.db_path
+        soci = get_all_soci() # Recupera tutti i soci dal database
 
         #print(f"DEBUG: I dati restituiti da get_all_soci sono: {soci}") 
 
@@ -143,7 +143,7 @@ class DialogoListaSoci(QDialog):
         socio_selezionato_id = int(socio_id_item.text())
 
         # Questa è la riga cruciale che deve passare self.db_path e socio_selezionato_id
-        dialog = DialogoSocio(self.db_path, socio_id=socio_selezionato_id, parent=self) # <<< MODIFICA QUESTA RIGA
+        dialog = DialogoSocio(socio_id=socio_selezionato_id, parent=self) # <<< MODIFICA QUESTA RIGA
         if dialog.exec() == QDialog.Accepted:
             QMessageBox.information(self, "Informazione", "Socio modificato con successo.")
             self.carica_dati() # Ricarica i dati dopo la modifica per vedere gli aggiornamenti
@@ -166,7 +166,7 @@ class DialogoListaSoci(QDialog):
                                          QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
 
             if reply == QMessageBox.Yes:
-                if delete_socio(self.db_path, socio_id): # 
+                if delete_socio(socio_id): # 
                     QMessageBox.information(self, "Successo", "Socio eliminato con successo!")
                     self.carica_dati()
                 else:
@@ -235,7 +235,7 @@ class DialogoListaSoci(QDialog):
         socio_id_item = self.tabella.item(row, 0)
         if socio_id_item:
             socio_id = int(socio_id_item.text())
-            stampa_tessera_pdf(self.db_path, socio_id, parent_widget=self) # <<< AGGIUNTO self.db_path
+            stampa_tessera_pdf(socio_id, parent_widget=self) # <<< Aggiungi il parent_widget per mostrare i messaggi nella finestra principale
             QMessageBox.information(self, "Stampa Tessera", "Tessera stampata con successo!")
         else:
             QMessageBox.warning(self, "Errore", "ID Socio non trovato per la riga selezionata.")

@@ -40,10 +40,10 @@ from dialogo_socio import DialogoSocio # <--- MODIFICA/AGGIUNGI QUESTA RIGA
 
 
 class FinestraGestioneSoci(QWidget):
-    def __init__(self, db_path, parent=None):
+    def __init__(self,parent=None):
         print("DEBUG: FinestraGestioneSoci __init__ chiamata.")
         super().__init__(parent)
-        self.db_path = db_path
+       # self.db_path = db_path
         self.setWindowTitle("Gestione Soci Annuali")
         self.setMinimumSize(750, 550)
         
@@ -124,7 +124,7 @@ class FinestraGestioneSoci(QWidget):
 
 
     def apri_dialogo_aggiungi_socio(self):
-        dialog = DialogoSocio(self.db_path, parent=self) # 
+        dialog = DialogoSocio(parent=self) # 
         if dialog.exec() == QDialog.Accepted:
            QMessageBox.information(self, "Informazione", "Nuovo socio aggiunto con successo.")
         # QUI: Potresti voler aggiornare la lista dei soci nella finestra principale
@@ -152,7 +152,7 @@ class FinestraGestioneSoci(QWidget):
         socio_selezionato_id = int(socio_id_item.text())
 
         # Ora socio_selezionato_id contiene l'ID corretto
-        dialog = DialogoSocio(self.db_path, socio_id=socio_selezionato_id, parent=self)
+        dialog = DialogoSocio(socio_id=socio_selezionato_id, parent=self)
         if dialog.exec() == QDialog.Accepted:
             QMessageBox.information(self, "Informazione", "Socio modificato con successo.")
             self.carica_dati() # Ricarica i dati dopo la modifica per vedere gli aggiornamenti
@@ -162,7 +162,7 @@ class FinestraGestioneSoci(QWidget):
 
     def apri_dialogo_lista_soci(self):
         """Apre il dialogo per visualizzare e gestire la lista dei soci."""
-        dialog = DialogoListaSoci(self.db_path, parent=self) # Crea un'istanza del dialogo della lista
+        dialog = DialogoListaSoci(parent=self) # Crea un'istanza del dialogo della lista
         dialog.exec() # Mostra il dialogo in modalità modale (blocca la finestra padre finché non viene chiuso)
         # Dopo che il dialogo della lista è stato chiuso, potresti voler ricaricare i dati
         # nella tua FinestraGestioneSoci se avesse una visualizzazione dei soci (che ora non ha)
@@ -180,7 +180,7 @@ class FinestraGestioneSoci(QWidget):
     def apri_dialogo_comunicazioni_soci(self):
         # Prima era: dialog = DialogoComunicazioni(self)
         # Adesso: Passiamo self.db_path
-        dialog = DialogoComunicazioni(self.db_path, self) # <<< MODIFICA QUESTA RIGA
+        dialog = DialogoComunicazioni(self) # <<< MODIFICA QUESTA RIGA
         dialog.exec()
 
     

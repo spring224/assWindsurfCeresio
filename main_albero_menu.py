@@ -32,41 +32,59 @@ from dialogo_comunicazioni import DialogoComunicazioni
 # --- INIZIO CODICE PER LA GESTIONE DEI PERCORSI DELLE RISORSE E DEL DB (GIÀ DISCUSSO) ---
 # ==============================================================================
 
+# main_app.py (DOPO I TUOI IMPORT ESISTENTI)
+
+# --- 1. Definizione Percorsi Base per Risorse e Dati Utente ---
+# (Copiare/incollare questo blocco esattamente come fornito prima)
 if getattr(sys, 'frozen', False):
-    app_base_path = Path(sys._MEIPASS)
+    resource_base_dir = Path(sys._MEIPASS)
 else:
-    app_base_path = Path(__file__).resolve().parent
+    resource_base_dir = Path(__file__).resolve().parent
 
-DB_FILENAME = "applicazionedb.db"
-DB_FOLDER_NAME = "gestione_dati"
-
-template_db_path = app_base_path / DB_FOLDER_NAME / DB_FILENAME
-
-if sys.platform.startswith('win'):
-    persistent_app_data_root = Path(os.getenv('LOCALAPPDATA'))
-elif sys.platform.startswith('darwin'):
-    persistent_app_data_root = Path.home() / 'Library' / 'Application Support'
-else: # Linux
+if os.name == 'nt':
+    persistent_app_data_root = Path(os.environ['APPDATA'])
+elif os.name == 'posix':
     persistent_app_data_root = Path.home() / '.local' / 'share'
+else:
+    persistent_app_data_root = Path.home()
 
-APP_DATA_FOLDER_NAME = "AssociazioneWindsurfCeresio" 
+# --- 2. Nomi dei File e delle Cartelle Specifici ---
+# (Copiare/incollare questo blocco esattamente come fornito prima)
+APP_DATA_FOLDER_NAME = "AssociazioneWindsurfCeresioAppDati" # <<< INSERISCI QUI IL NOME DESIDERATO
+DB_FILENAME = "applicazionedb.db"
+
+# --- 3. Definizione Percorsi Completi ---
+# (Copiare/incollare questo blocco esattamente come fornito prima)
+template_db_path = resource_base_dir / "gestione_dati" / DB_FILENAME
 persistent_app_data_path = persistent_app_data_root / APP_DATA_FOLDER_NAME
-
 final_db_path = persistent_app_data_path / DB_FILENAME
 
+# --- 4. Logica di Copia del Database all'Avvio (Solo per App Compilate) ---
+# (Copiare/incollare questo blocco esattamente come fornito prima)
 if getattr(sys, 'frozen', False):
     persistent_app_data_path.mkdir(parents=True, exist_ok=True)
     if not final_db_path.exists():
         try:
+            print(f"DEBUG: Tentativo di copiare il database da: {template_db_path} a: {final_db_path}")
             shutil.copy2(template_db_path, final_db_path)
-            print(f"DEBUG: Database copiato da {template_db_path} a {final_db_path}")
+            print(f"DEBUG: Database copiato con successo in {final_db_path}")
         except Exception as e:
-            print(f"ERRORE GRAVE: Impossibile copiare il database: {e}")
+            print(f"ERRORE GRAVE: Impossibile copiare il database! Dettagli: {e}")
+            print(f"DEBUG: Percorso sorgente (template_db_path) cercato: {template_db_path}")
+            print(f"DEBUG: Esistenza sorgente: {template_db_path.exists()}")
+            print(f"DEBUG: Percorso destinazione (final_db_path): {final_db_path}")
+            print(f"DEBUG: Esistenza cartella destinazione: {final_db_path.parent.exists()}")
             sys.exit(1)
 else:
-    final_db_path = app_base_path / DB_FOLDER_NAME / DB_FILENAME
-    print(f"DEBUG: Esecuzione in sviluppo. Database usato: {final_db_path}")
+    (resource_base_dir / "gestione_dati").mkdir(parents=True, exist_ok=True)
+    print(f"DEBUG: Applicazione in modalità sviluppo. Il database locale sarà in: {resource_base_dir / 'gestione_dati' / DB_FILENAME}")
 
+# --- ASSICURATI CHE L'APP USI SEMPRE 'final_db_path' PER LE OPERAZIONI DB ---
+# Questo è FONDAMENTALE. Tutte le tue chiamate a 'get_connection' (in data_access.py)
+# o a qualsiasi altra funzione che interagisce con il database DEVONO USARE 'final_db_path'.
+# Ad esempio, se hai una classe MainApp o MainWindow, potresti passarglielo così:
+# self.db_path_per_uso = final_db_path
+# E poi le tue classi DialogoListaSoci, DialogoSocio, etc. devono ricevere questo percorso.
 # ==============================================================================
 # --- FINE CODICE PER LA GESTIONE DEI PERCORSI ---
 # ==============================================================================
@@ -93,7 +111,7 @@ class LoginPanel(QWidget):
         # Carica il logo per la schermata di login
         logo_label = QLabel()
         # Usa app_base_path per il logo
-        img_path = app_base_path / "logo_windsurf_resized.jpg"
+        img_path = resource_base_dir / "logo_windsurf_resized.jpg"
         if img_path.exists():
             pixmap = QPixmap(str(img_path))
             logo_label.setPixmap(pixmap)
@@ -139,7 +157,7 @@ class MainWindow(QMainWindow):
         self.db_path = final_db_path
 
         # --- Carica il QSS (Stile) ---
-        qss_path = app_base_path / "style.qss"
+        qss_path = resource_base_dir / "style.qss"
         if qss_path.exists():
             with open(qss_path, "r") as f:
                  self.setStyleSheet(f.read()) # <<< COMMENTA QUESTA RIGA
@@ -148,7 +166,7 @@ class MainWindow(QMainWindow):
             print(f"AVVISO: File style.qss non trovato in {qss_path}. Lo stile predefinito verrà utilizzato.")
 
         # --- Carica Font Awesome per le icone ---
-        font_awesome_path = app_base_path / "fa-solid-900.ttf"
+        font_awesome_path = resource_base_dir / "fa-solid-900.ttf"
         if font_awesome_path.exists():
             if QFontDatabase.addApplicationFont(str(font_awesome_path)) == -1:
                 print(f"ERRORE: Impossibile caricare il font Font Awesome da {font_awesome_path}.")
@@ -222,7 +240,7 @@ class MainWindow(QMainWindow):
         self.content_stack.addWidget(home_widget)
 
         # Tesserati Annuali
-        self.widget_cache["TesseratiAnnuali"] = FinestraGestioneSoci(self.db_path)
+        self.widget_cache["TesseratiAnnuali"] = FinestraGestioneSoci()
         self.content_stack.addWidget(self.widget_cache["TesseratiAnnuali"])
 
         # Anagrafica Materiali
@@ -262,7 +280,7 @@ class MainWindow(QMainWindow):
         password = self.login_panel.password_input.text()
 
         try:
-            with get_connection(final_db_path) as conn:
+            with get_connection() as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT ruolo FROM Utenti WHERE username = ? AND password = ?", (username, password))
                 result = cursor.fetchone()
